@@ -1,0 +1,53 @@
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Build Results
+[Dd]ebug/
+[Rr]elease/
+[Bb]in/
+[Oo]bj/
+[out]/
+build/
+*.log
+*.ide
+*.aps
+*.ncb
+*.opensdf
+*.sdf
+*.ipch/
+_UpgradeReport_Files/
+App_Data/
+# Packages
+packages/
+*.nupkg
+.nuget/
+# Rider
+.idea/
+# Resharper
+*.DotSettings
+# Local Store
+.DS_Store
+# Unit Test Results
+TestResults/
+# Compiled files
+*.dll
+*.exe
+# Temp files
+*.tmp
+*.temp
+# SQL
+*.mdf
+*.ldf
+# Node.js
+node_modules/
+# Misc
+*.pid
+# Dependency directories
+bin/
+obj/
+# Visual Studio Code
+.vscode/
