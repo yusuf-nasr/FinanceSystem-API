@@ -7,7 +7,8 @@ namespace FinanceSystem_Dotnet.Models
     {
         public int Id { get; set; }
         public TransactionForwardStatus Status { get; set; }
-        public string Comment { get; set; }
+        public string? SenderComment { get; set; }
+        public string? ReceiverComment { get; set; }
         public bool Seen { get; set; }
         public DateTime ForwardedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

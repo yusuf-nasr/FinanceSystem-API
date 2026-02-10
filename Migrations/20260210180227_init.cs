@@ -7,7 +7,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace FinanceSystem_Dotnet.Migrations
 {
     /// <inheritdoc />
-    public partial class initial : Migration
+    public partial class init : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -33,7 +33,7 @@ namespace FinanceSystem_Dotnet.Migrations
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     Active = table.Column<bool>(type: "boolean", nullable: false),
                     Role = table.Column<int>(type: "integer", nullable: false),
-                    LastLogin = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    LastLogin = table.Column<DateTime>(type: "timestamp with time zone", nullable: true),
                     DepartmentName = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
@@ -44,7 +44,29 @@ namespace FinanceSystem_Dotnet.Migrations
                         column: x => x.DepartmentName,
                         principalTable: "Departments",
                         principalColumn: "Name",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
+                });
+
+            migrationBuilder.CreateTable(
+                name: "Documents",
+                columns: table => new
+                {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    Title = table.Column<string>(type: "text", nullable: false),
+                    Content = table.Column<byte[]>(type: "bytea", nullable: false),
+                    UploadedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    UploaderName = table.Column<string>(type: "text", nullable: false)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_Documents", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_Documents_Users_UploaderName",
+                        column: x => x.UploaderName,
+                        principalTable: "Users",
+                        principalColumn: "Name",
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -62,7 +84,7 @@ namespace FinanceSystem_Dotnet.Migrations
                         column: x => x.CreatorName,
                         principalTable: "Users",
                         principalColumn: "Name",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -87,41 +109,45 @@ namespace FinanceSystem_Dotnet.Migrations
                         column: x => x.TransactionTypeName,
                         principalTable: "TransactionTypes",
                         principalColumn: "Name",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_Transactions_Users_CreatorName",
                         column: x => x.CreatorName,
                         principalTable: "Users",
                         principalColumn: "Name",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
-                name: "Documents",
+                name: "TransactionDocument",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "integer", nullable: false)
-                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
-                    Content = table.Column<byte[]>(type: "bytea", nullable: false),
-                    UploadedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UploaderName = table.Column<string>(type: "text", nullable: false),
-                    TransactionId = table.Column<int>(type: "integer", nullable: false)
+                    TransactionId = table.Column<int>(type: "integer", nullable: false),
+                    DocumentId = table.Column<int>(type: "integer", nullable: false),
+                    AttachedBy = table.Column<string>(type: "text", nullable: false),
+                    AttachedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Documents", x => x.Id);
+                    table.PrimaryKey("PK_TransactionDocument", x => new { x.TransactionId, x.DocumentId });
                     table.ForeignKey(
-                        name: "FK_Documents_Transactions_TransactionId",
+                        name: "FK_TransactionDocument_Documents_DocumentId",
+                        column: x => x.DocumentId,
+                        principalTable: "Documents",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Restrict);
+                    table.ForeignKey(
+                        name: "FK_TransactionDocument_Transactions_TransactionId",
                         column: x => x.TransactionId,
                         principalTable: "Transactions",
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_Documents_Users_UploaderName",
-                        column: x => x.UploaderName,
+                        name: "FK_TransactionDocument_Users_AttachedBy",
+                        column: x => x.AttachedBy,
                         principalTable: "Users",
                         principalColumn: "Name",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateTable(
@@ -131,7 +157,8 @@ namespace FinanceSystem_Dotnet.Migrations
                     Id = table.Column<int>(type: "integer", nullable: false)
                         .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Status = table.Column<int>(type: "integer", nullable: false),
-                    Comment = table.Column<string>(type: "text", nullable: false),
+                    SenderComment = table.Column<string>(type: "text", nullable: true),
+                    ReceiverComment = table.Column<string>(type: "text", nullable: true),
                     Seen = table.Column<bool>(type: "boolean", nullable: false),
                     ForwardedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -147,7 +174,7 @@ namespace FinanceSystem_Dotnet.Migrations
                         column: x => x.TransactionId,
                         principalTable: "Transactions",
                         principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                        onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
                         name: "FK_TransactionForwards_Users_ReceiverName",
                         column: x => x.ReceiverName,
@@ -165,17 +192,23 @@ namespace FinanceSystem_Dotnet.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_Departments_ManagerName",
                 table: "Departments",
-                column: "ManagerName");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_Documents_TransactionId",
-                table: "Documents",
-                column: "TransactionId");
+                column: "ManagerName",
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_Documents_UploaderName",
                 table: "Documents",
                 column: "UploaderName");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TransactionDocument_AttachedBy",
+                table: "TransactionDocument",
+                column: "AttachedBy");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_TransactionDocument_DocumentId",
+                table: "TransactionDocument",
+                column: "DocumentId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_TransactionForwards_ReceiverName",
@@ -218,7 +251,7 @@ namespace FinanceSystem_Dotnet.Migrations
                 column: "ManagerName",
                 principalTable: "Users",
                 principalColumn: "Name",
-                onDelete: ReferentialAction.Cascade);
+                onDelete: ReferentialAction.Restrict);
         }
 
         /// <inheritdoc />
@@ -229,10 +262,13 @@ namespace FinanceSystem_Dotnet.Migrations
                 table: "Departments");
 
             migrationBuilder.DropTable(
-                name: "Documents");
+                name: "TransactionDocument");
 
             migrationBuilder.DropTable(
                 name: "TransactionForwards");
+
+            migrationBuilder.DropTable(
+                name: "Documents");
 
             migrationBuilder.DropTable(
                 name: "Transactions");

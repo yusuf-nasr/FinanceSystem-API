@@ -36,7 +36,8 @@ namespace FinanceSystem_Dotnet.Migrations
 
                     b.HasKey("Name");
 
-                    b.HasIndex("ManagerName");
+                    b.HasIndex("ManagerName")
+                        .IsUnique();
 
                     b.ToTable("Departments");
                 });
@@ -53,8 +54,9 @@ namespace FinanceSystem_Dotnet.Migrations
                         .IsRequired()
                         .HasColumnType("bytea");
 
-                    b.Property<int>("TransactionId")
-                        .HasColumnType("integer");
+                    b.Property<string>("Title")
+                        .IsRequired()
+                        .HasColumnType("text");
 
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("timestamp with time zone");
@@ -64,8 +66,6 @@ namespace FinanceSystem_Dotnet.Migrations
                         .HasColumnType("text");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("TransactionId");
 
                     b.HasIndex("UploaderName");
 
@@ -114,6 +114,30 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.ToTable("Transactions");
                 });
 
+            modelBuilder.Entity("FinanceSystem_Dotnet.Models.TransactionDocument", b =>
+                {
+                    b.Property<int>("TransactionId")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DocumentId")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTime>("AttachedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("AttachedBy")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.HasKey("TransactionId", "DocumentId");
+
+                    b.HasIndex("AttachedBy");
+
+                    b.HasIndex("DocumentId");
+
+                    b.ToTable("TransactionDocument", (string)null);
+                });
+
             modelBuilder.Entity("FinanceSystem_Dotnet.Models.TransactionForward", b =>
                 {
                     b.Property<int>("Id")
@@ -122,12 +146,11 @@ namespace FinanceSystem_Dotnet.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
-                    b.Property<string>("Comment")
-                        .IsRequired()
-                        .HasColumnType("text");
-
                     b.Property<DateTime>("ForwardedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReceiverComment")
+                        .HasColumnType("text");
 
                     b.Property<string>("ReceiverName")
                         .IsRequired()
@@ -135,6 +158,9 @@ namespace FinanceSystem_Dotnet.Migrations
 
                     b.Property<bool>("Seen")
                         .HasColumnType("boolean");
+
+                    b.Property<string>("SenderComment")
+                        .HasColumnType("text");
 
                     b.Property<string>("SenderName")
                         .IsRequired()
@@ -195,7 +221,7 @@ namespace FinanceSystem_Dotnet.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<DateTime>("LastLogin")
+                    b.Property<DateTime?>("LastLogin")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<int>("Role")
@@ -211,9 +237,9 @@ namespace FinanceSystem_Dotnet.Migrations
             modelBuilder.Entity("FinanceSystem_Dotnet.Models.Department", b =>
                 {
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Manager")
-                        .WithMany("ManagedDepartments")
-                        .HasForeignKey("ManagerName")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .WithOne("ManagedDepartment")
+                        .HasForeignKey("FinanceSystem_Dotnet.Models.Department", "ManagerName")
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Manager");
@@ -221,19 +247,11 @@ namespace FinanceSystem_Dotnet.Migrations
 
             modelBuilder.Entity("FinanceSystem_Dotnet.Models.Document", b =>
                 {
-                    b.HasOne("FinanceSystem_Dotnet.Models.Transaction", "Transaction")
-                        .WithMany("Documents")
-                        .HasForeignKey("TransactionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Uploader")
                         .WithMany("UploadedDocuments")
                         .HasForeignKey("UploaderName")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
-
-                    b.Navigation("Transaction");
 
                     b.Navigation("Uploader");
                 });
@@ -243,18 +261,45 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Creator")
                         .WithMany("CreatedTransactions")
                         .HasForeignKey("CreatorName")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("FinanceSystem_Dotnet.Models.TransactionType", "TransactionType")
                         .WithMany("Transactions")
                         .HasForeignKey("TransactionTypeName")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Creator");
 
                     b.Navigation("TransactionType");
+                });
+
+            modelBuilder.Entity("FinanceSystem_Dotnet.Models.TransactionDocument", b =>
+                {
+                    b.HasOne("FinanceSystem_Dotnet.Models.User", "AttachedByUser")
+                        .WithMany()
+                        .HasForeignKey("AttachedBy")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FinanceSystem_Dotnet.Models.Document", "Document")
+                        .WithMany()
+                        .HasForeignKey("DocumentId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("FinanceSystem_Dotnet.Models.Transaction", "Transaction")
+                        .WithMany()
+                        .HasForeignKey("TransactionId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("AttachedByUser");
+
+                    b.Navigation("Document");
+
+                    b.Navigation("Transaction");
                 });
 
             modelBuilder.Entity("FinanceSystem_Dotnet.Models.TransactionForward", b =>
@@ -274,7 +319,7 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.HasOne("FinanceSystem_Dotnet.Models.Transaction", "Transaction")
                         .WithMany("Forwards")
                         .HasForeignKey("TransactionId")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Receiver");
@@ -289,7 +334,7 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Creator")
                         .WithMany("CreatedTransactionTypes")
                         .HasForeignKey("CreatorName")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Creator");
@@ -300,7 +345,7 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.HasOne("FinanceSystem_Dotnet.Models.Department", "Department")
                         .WithMany("Users")
                         .HasForeignKey("DepartmentName")
-                        .OnDelete(DeleteBehavior.Cascade)
+                        .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.Navigation("Department");
@@ -313,8 +358,6 @@ namespace FinanceSystem_Dotnet.Migrations
 
             modelBuilder.Entity("FinanceSystem_Dotnet.Models.Transaction", b =>
                 {
-                    b.Navigation("Documents");
-
                     b.Navigation("Forwards");
                 });
 
@@ -329,7 +372,8 @@ namespace FinanceSystem_Dotnet.Migrations
 
                     b.Navigation("CreatedTransactions");
 
-                    b.Navigation("ManagedDepartments");
+                    b.Navigation("ManagedDepartment")
+                        .IsRequired();
 
                     b.Navigation("ReceivedForwards");
 

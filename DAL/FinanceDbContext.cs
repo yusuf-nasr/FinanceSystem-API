@@ -15,6 +15,7 @@ namespace FinanceSystem_Dotnet.DAL
         public DbSet<TransactionType> TransactionTypes { get; set; }
         public DbSet<Document> Documents { get; set; }
         public DbSet<TransactionForward> TransactionForwards { get; set; }
+        public DbSet<TransactionDocument> TransactionDocuments { get; set; }// for explicit join entity
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -28,7 +29,8 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Department)
                     .WithMany(d => d.Users)
-                    .HasForeignKey(e => e.DepartmentName);
+                    .HasForeignKey(e => e.DepartmentName)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<Department>(entity =>
@@ -36,8 +38,9 @@ namespace FinanceSystem_Dotnet.DAL
                 entity.HasKey(e => e.Name);
 
                 entity.HasOne(e => e.Manager)
-                    .WithMany(u => u.ManagedDepartments)
-                    .HasForeignKey(e => e.ManagerName);
+                    .WithOne(u => u.ManagedDepartment)
+                    .HasForeignKey<Department>(e => e.ManagerName)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<Transaction>(entity =>
@@ -48,11 +51,41 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Creator)
                     .WithMany(u => u.CreatedTransactions)
-                    .HasForeignKey(e => e.CreatorName);
+                    .HasForeignKey(e => e.CreatorName)
+                    .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasOne(e => e.TransactionType)
                     .WithMany(tt => tt.Transactions)
-                    .HasForeignKey(e => e.TransactionTypeName);
+                    .HasForeignKey(e => e.TransactionTypeName)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                // Use the CLR join entity so the "AttachedBy" and "AttachedAt" are first-class properties
+                entity.HasMany(t => t.Documents)
+                    .WithMany(d => d.Transactions)
+                    .UsingEntity<TransactionDocument>(
+                        right => right
+                            .HasOne(j => j.Document)
+                            .WithMany()
+                            .HasForeignKey(j => j.DocumentId)
+                            .OnDelete(DeleteBehavior.Restrict),
+                        left => left
+                            .HasOne(j => j.Transaction)
+                            .WithMany()
+                            .HasForeignKey(j => j.TransactionId)
+                            .OnDelete(DeleteBehavior.Cascade),
+                        join =>
+                        {
+                            join.HasKey(j => new { j.TransactionId, j.DocumentId });
+                            join.Property(j => j.AttachedBy).IsRequired();
+                            join.Property(j => j.AttachedAt).IsRequired();
+
+                            join.HasOne(j => j.AttachedByUser)
+                                .WithMany()
+                                .HasForeignKey(j => j.AttachedBy)
+                                .OnDelete(DeleteBehavior.Restrict);
+
+                            join.ToTable("TransactionDocument");
+                        });
             });
 
             modelBuilder.Entity<TransactionType>(entity =>
@@ -61,7 +94,8 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Creator)
                     .WithMany(u => u.CreatedTransactionTypes)
-                    .HasForeignKey(e => e.CreatorName);
+                    .HasForeignKey(e => e.CreatorName)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<Document>(entity =>
@@ -71,11 +105,8 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Uploader)
                     .WithMany(u => u.UploadedDocuments)
-                    .HasForeignKey(e => e.UploaderName);
-
-                entity.HasOne(e => e.Transaction)
-                    .WithMany(t => t.Documents)
-                    .HasForeignKey(e => e.TransactionId);
+                    .HasForeignKey(e => e.UploaderName)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
 
             modelBuilder.Entity<TransactionForward>(entity =>
@@ -95,7 +126,8 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Transaction)
                     .WithMany(t => t.Forwards)
-                    .HasForeignKey(e => e.TransactionId);
+                    .HasForeignKey(e => e.TransactionId)
+                    .OnDelete(DeleteBehavior.Restrict);
             });
         }
     }
