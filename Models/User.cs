@@ -10,12 +10,12 @@ namespace FinanceSystem_Dotnet.Models
         public DateTime CreatedAt { get; set; }
         public bool Active { get; set; }
         public Role Role { get; set; }
-        public DateTime LastLogin { get; set; }
+        public DateTime? LastLogin { get; set; }
 
         public string DepartmentName { get; set; }
         public virtual Department Department { get; set; }
 
-        public virtual ICollection<Department> ManagedDepartments { get; set; }
+        public virtual Department ManagedDepartment { get; set; }
         public virtual ICollection<Transaction> CreatedTransactions { get; set; }
         public virtual ICollection<TransactionType> CreatedTransactionTypes { get; set; }
         public virtual ICollection<Document> UploadedDocuments { get; set; }

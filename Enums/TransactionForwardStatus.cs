@@ -2,8 +2,9 @@ namespace FinanceSystem_Dotnet.Enums
 {
     public enum TransactionForwardStatus
     {
-        Pending,
-        Approved,
-        Rejected
+        WAITING,
+        NEEDS_EDITING,
+        REJECTED,
+        APPROVED
     }
 }
