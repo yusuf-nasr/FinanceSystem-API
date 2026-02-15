@@ -20,7 +20,7 @@ namespace FinanceSystem_Dotnet.Controllers
         {
             context = _context;
         }
-        [Authorize(Roles = "ADMIN")]
+        [Authorize]
         [HttpPost("create")]
         public async Task<ActionResult> CreateUser([FromBody] UserCreateDTO request)
         {

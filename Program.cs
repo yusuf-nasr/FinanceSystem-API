@@ -1,9 +1,9 @@
 using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Transformers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
-using Microsoft.OpenApi;
 using System.Text;
 
 namespace FinanceSystem_Dotnet
@@ -18,24 +18,12 @@ namespace FinanceSystem_Dotnet
             builder.Services.AddControllers();
             builder.Services.AddDbContext<FinanceDbContext>(options =>
                 options.UseLazyLoadingProxies().UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
-            builder.Services.AddEndpointsApiExplorer();
-            builder.Services.AddSwaggerGen(options =>
-            {
-                options.SwaggerDoc("v1", new OpenApiInfo
-                {
-                    Title = "Finance System API",
-                    Version = "v1",
-                });
 
-                options.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
-                {
-                    Name = "Authorization",
-                    Type = SecuritySchemeType.Http,
-                    Scheme = "Bearer",
-                    BearerFormat = "JWT",
-                    In = ParameterLocation.Header,
-                    Description = "Enter your JWT token"
-                });
+            // OpenAPI document generation with Bearer auth
+            builder.Services.AddOpenApi(options =>
+            {
+                options.OpenApiVersion = Microsoft.OpenApi.OpenApiSpecVersion.OpenApi3_0;
+                options.AddDocumentTransformer<BearerSecuritySchemeTransformer>();
             });
 
             // Configure JWT authentication
@@ -59,13 +47,15 @@ namespace FinanceSystem_Dotnet
                 };
             });
 
-
             var app = builder.Build();
 
             if (app.Environment.IsDevelopment())
             {
-                app.UseSwagger();
-                app.UseSwaggerUI();
+                app.MapOpenApi();
+                app.UseSwaggerUI(options =>
+                {
+                    options.SwaggerEndpoint("/openapi/v1.json", "Finance System API v1");
+                });
             }
             app.UseMiddleware<Middlewares.RateLimitingMiddleware>();
             app.UseHttpsRedirection();
@@ -75,5 +65,4 @@ namespace FinanceSystem_Dotnet
             app.Run();
         }
     }
-
 }
