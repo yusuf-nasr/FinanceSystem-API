@@ -17,7 +17,7 @@ namespace FinanceSystem_Dotnet.Migrations
                 columns: table => new
                 {
                     Name = table.Column<string>(type: "text", nullable: false),
-                    ManagerName = table.Column<string>(type: "text", nullable: false)
+                    ManagerId = table.Column<int>(type: "integer", nullable: true)
                 },
                 constraints: table =>
                 {
@@ -28,6 +28,8 @@ namespace FinanceSystem_Dotnet.Migrations
                 name: "Users",
                 columns: table => new
                 {
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
                     Name = table.Column<string>(type: "text", nullable: false),
                     HashedPassword = table.Column<string>(type: "text", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
@@ -38,7 +40,7 @@ namespace FinanceSystem_Dotnet.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_Users", x => x.Name);
+                    table.PrimaryKey("PK_Users", x => x.Id);
                     table.ForeignKey(
                         name: "FK_Users_Departments_DepartmentName",
                         column: x => x.DepartmentName,
@@ -56,16 +58,16 @@ namespace FinanceSystem_Dotnet.Migrations
                     Title = table.Column<string>(type: "text", nullable: false),
                     Content = table.Column<byte[]>(type: "bytea", nullable: false),
                     UploadedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    UploaderName = table.Column<string>(type: "text", nullable: false)
+                    UploaderId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_Documents", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_Documents_Users_UploaderName",
-                        column: x => x.UploaderName,
+                        name: "FK_Documents_Users_UploaderId",
+                        column: x => x.UploaderId,
                         principalTable: "Users",
-                        principalColumn: "Name",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -74,16 +76,16 @@ namespace FinanceSystem_Dotnet.Migrations
                 columns: table => new
                 {
                     Name = table.Column<string>(type: "text", nullable: false),
-                    CreatorName = table.Column<string>(type: "text", nullable: false)
+                    CreatorId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_TransactionTypes", x => x.Name);
                     table.ForeignKey(
-                        name: "FK_TransactionTypes_Users_CreatorName",
-                        column: x => x.CreatorName,
+                        name: "FK_TransactionTypes_Users_CreatorId",
+                        column: x => x.CreatorId,
                         principalTable: "Users",
-                        principalColumn: "Name",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -98,7 +100,7 @@ namespace FinanceSystem_Dotnet.Migrations
                     Fulfilled = table.Column<bool>(type: "boolean", nullable: false),
                     Priority = table.Column<int>(type: "integer", nullable: false),
                     CreatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    CreatorName = table.Column<string>(type: "text", nullable: false),
+                    CreatorId = table.Column<int>(type: "integer", nullable: false),
                     TransactionTypeName = table.Column<string>(type: "text", nullable: false)
                 },
                 constraints: table =>
@@ -111,10 +113,10 @@ namespace FinanceSystem_Dotnet.Migrations
                         principalColumn: "Name",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "FK_Transactions_Users_CreatorName",
-                        column: x => x.CreatorName,
+                        name: "FK_Transactions_Users_CreatorId",
+                        column: x => x.CreatorId,
                         principalTable: "Users",
-                        principalColumn: "Name",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -124,7 +126,7 @@ namespace FinanceSystem_Dotnet.Migrations
                 {
                     TransactionId = table.Column<int>(type: "integer", nullable: false),
                     DocumentId = table.Column<int>(type: "integer", nullable: false),
-                    AttachedBy = table.Column<string>(type: "text", nullable: false),
+                    AttachedBy = table.Column<int>(type: "integer", nullable: false),
                     AttachedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
@@ -146,7 +148,7 @@ namespace FinanceSystem_Dotnet.Migrations
                         name: "FK_TransactionDocument_Users_AttachedBy",
                         column: x => x.AttachedBy,
                         principalTable: "Users",
-                        principalColumn: "Name",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
 
@@ -159,11 +161,12 @@ namespace FinanceSystem_Dotnet.Migrations
                     Status = table.Column<int>(type: "integer", nullable: false),
                     SenderComment = table.Column<string>(type: "text", nullable: true),
                     ReceiverComment = table.Column<string>(type: "text", nullable: true),
-                    Seen = table.Column<bool>(type: "boolean", nullable: false),
+                    SenderSeen = table.Column<bool>(type: "boolean", nullable: false),
+                    ReceiverSeen = table.Column<bool>(type: "boolean", nullable: false),
                     ForwardedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
                     UpdatedAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
-                    SenderName = table.Column<string>(type: "text", nullable: false),
-                    ReceiverName = table.Column<string>(type: "text", nullable: false),
+                    SenderId = table.Column<int>(type: "integer", nullable: false),
+                    ReceiverId = table.Column<int>(type: "integer", nullable: false),
                     TransactionId = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
@@ -176,29 +179,29 @@ namespace FinanceSystem_Dotnet.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "FK_TransactionForwards_Users_ReceiverName",
-                        column: x => x.ReceiverName,
+                        name: "FK_TransactionForwards_Users_ReceiverId",
+                        column: x => x.ReceiverId,
                         principalTable: "Users",
-                        principalColumn: "Name",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "FK_TransactionForwards_Users_SenderName",
-                        column: x => x.SenderName,
+                        name: "FK_TransactionForwards_Users_SenderId",
+                        column: x => x.SenderId,
                         principalTable: "Users",
-                        principalColumn: "Name",
+                        principalColumn: "Id",
                         onDelete: ReferentialAction.Restrict);
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_Departments_ManagerName",
+                name: "IX_Departments_ManagerId",
                 table: "Departments",
-                column: "ManagerName",
+                column: "ManagerId",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_Documents_UploaderName",
+                name: "IX_Documents_UploaderId",
                 table: "Documents",
-                column: "UploaderName");
+                column: "UploaderId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_TransactionDocument_AttachedBy",
@@ -211,14 +214,14 @@ namespace FinanceSystem_Dotnet.Migrations
                 column: "DocumentId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_TransactionForwards_ReceiverName",
+                name: "IX_TransactionForwards_ReceiverId",
                 table: "TransactionForwards",
-                column: "ReceiverName");
+                column: "ReceiverId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_TransactionForwards_SenderName",
+                name: "IX_TransactionForwards_SenderId",
                 table: "TransactionForwards",
-                column: "SenderName");
+                column: "SenderId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_TransactionForwards_TransactionId",
@@ -226,9 +229,9 @@ namespace FinanceSystem_Dotnet.Migrations
                 column: "TransactionId");
 
             migrationBuilder.CreateIndex(
-                name: "IX_Transactions_CreatorName",
+                name: "IX_Transactions_CreatorId",
                 table: "Transactions",
-                column: "CreatorName");
+                column: "CreatorId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Transactions_TransactionTypeName",
@@ -236,9 +239,9 @@ namespace FinanceSystem_Dotnet.Migrations
                 column: "TransactionTypeName");
 
             migrationBuilder.CreateIndex(
-                name: "IX_TransactionTypes_CreatorName",
+                name: "IX_TransactionTypes_CreatorId",
                 table: "TransactionTypes",
-                column: "CreatorName");
+                column: "CreatorId");
 
             migrationBuilder.CreateIndex(
                 name: "IX_Users_DepartmentName",
@@ -246,11 +249,11 @@ namespace FinanceSystem_Dotnet.Migrations
                 column: "DepartmentName");
 
             migrationBuilder.AddForeignKey(
-                name: "FK_Departments_Users_ManagerName",
+                name: "FK_Departments_Users_ManagerId",
                 table: "Departments",
-                column: "ManagerName",
+                column: "ManagerId",
                 principalTable: "Users",
-                principalColumn: "Name",
+                principalColumn: "Id",
                 onDelete: ReferentialAction.Restrict);
         }
 
@@ -258,7 +261,7 @@ namespace FinanceSystem_Dotnet.Migrations
         protected override void Down(MigrationBuilder migrationBuilder)
         {
             migrationBuilder.DropForeignKey(
-                name: "FK_Departments_Users_ManagerName",
+                name: "FK_Departments_Users_ManagerId",
                 table: "Departments");
 
             migrationBuilder.DropTable(

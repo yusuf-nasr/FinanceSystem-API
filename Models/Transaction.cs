@@ -13,7 +13,7 @@ namespace FinanceSystem_Dotnet.Models
         public TransactionPriority Priority { get; set; }
         public DateTime CreatedAt { get; set; }
 
-        public string CreatorName { get; set; }
+        public int CreatorId { get; set; }
         public virtual User Creator { get; set; }
 
         public string TransactionTypeName { get; set; }

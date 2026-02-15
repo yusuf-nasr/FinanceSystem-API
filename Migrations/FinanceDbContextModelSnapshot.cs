@@ -30,13 +30,12 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.Property<string>("Name")
                         .HasColumnType("text");
 
-                    b.Property<string>("ManagerName")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int?>("ManagerId")
+                        .HasColumnType("integer");
 
                     b.HasKey("Name");
 
-                    b.HasIndex("ManagerName")
+                    b.HasIndex("ManagerId")
                         .IsUnique();
 
                     b.ToTable("Departments");
@@ -61,13 +60,12 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.Property<DateTime>("UploadedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("UploaderName")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("UploaderId")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("UploaderName");
+                    b.HasIndex("UploaderId");
 
                     b.ToTable("Documents");
                 });
@@ -83,9 +81,8 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("CreatorName")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("CreatorId")
+                        .HasColumnType("integer");
 
                     b.Property<string>("Description")
                         .IsRequired()
@@ -107,7 +104,7 @@ namespace FinanceSystem_Dotnet.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("CreatorName");
+                    b.HasIndex("CreatorId");
 
                     b.HasIndex("TransactionTypeName");
 
@@ -125,9 +122,8 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.Property<DateTime>("AttachedAt")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<string>("AttachedBy")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("AttachedBy")
+                        .HasColumnType("integer");
 
                     b.HasKey("TransactionId", "DocumentId");
 
@@ -152,19 +148,20 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.Property<string>("ReceiverComment")
                         .HasColumnType("text");
 
-                    b.Property<string>("ReceiverName")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("ReceiverId")
+                        .HasColumnType("integer");
 
-                    b.Property<bool>("Seen")
+                    b.Property<bool>("ReceiverSeen")
                         .HasColumnType("boolean");
 
                     b.Property<string>("SenderComment")
                         .HasColumnType("text");
 
-                    b.Property<string>("SenderName")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("SenderId")
+                        .HasColumnType("integer");
+
+                    b.Property<bool>("SenderSeen")
+                        .HasColumnType("boolean");
 
                     b.Property<int>("Status")
                         .HasColumnType("integer");
@@ -177,9 +174,9 @@ namespace FinanceSystem_Dotnet.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ReceiverName");
+                    b.HasIndex("ReceiverId");
 
-                    b.HasIndex("SenderName");
+                    b.HasIndex("SenderId");
 
                     b.HasIndex("TransactionId");
 
@@ -191,21 +188,23 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.Property<string>("Name")
                         .HasColumnType("text");
 
-                    b.Property<string>("CreatorName")
-                        .IsRequired()
-                        .HasColumnType("text");
+                    b.Property<int>("CreatorId")
+                        .HasColumnType("integer");
 
                     b.HasKey("Name");
 
-                    b.HasIndex("CreatorName");
+                    b.HasIndex("CreatorId");
 
                     b.ToTable("TransactionTypes");
                 });
 
             modelBuilder.Entity("FinanceSystem_Dotnet.Models.User", b =>
                 {
-                    b.Property<string>("Name")
-                        .HasColumnType("text");
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
 
                     b.Property<bool>("Active")
                         .HasColumnType("boolean");
@@ -224,10 +223,14 @@ namespace FinanceSystem_Dotnet.Migrations
                     b.Property<DateTime?>("LastLogin")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasColumnType("text");
+
                     b.Property<int>("Role")
                         .HasColumnType("integer");
 
-                    b.HasKey("Name");
+                    b.HasKey("Id");
 
                     b.HasIndex("DepartmentName");
 
@@ -238,9 +241,8 @@ namespace FinanceSystem_Dotnet.Migrations
                 {
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Manager")
                         .WithOne("ManagedDepartment")
-                        .HasForeignKey("FinanceSystem_Dotnet.Models.Department", "ManagerName")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
+                        .HasForeignKey("FinanceSystem_Dotnet.Models.Department", "ManagerId")
+                        .OnDelete(DeleteBehavior.Restrict);
 
                     b.Navigation("Manager");
                 });
@@ -249,7 +251,7 @@ namespace FinanceSystem_Dotnet.Migrations
                 {
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Uploader")
                         .WithMany("UploadedDocuments")
-                        .HasForeignKey("UploaderName")
+                        .HasForeignKey("UploaderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -260,7 +262,7 @@ namespace FinanceSystem_Dotnet.Migrations
                 {
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Creator")
                         .WithMany("CreatedTransactions")
-                        .HasForeignKey("CreatorName")
+                        .HasForeignKey("CreatorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -306,13 +308,13 @@ namespace FinanceSystem_Dotnet.Migrations
                 {
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Receiver")
                         .WithMany("ReceivedForwards")
-                        .HasForeignKey("ReceiverName")
+                        .HasForeignKey("ReceiverId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Sender")
                         .WithMany("SentForwards")
-                        .HasForeignKey("SenderName")
+                        .HasForeignKey("SenderId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
@@ -333,7 +335,7 @@ namespace FinanceSystem_Dotnet.Migrations
                 {
                     b.HasOne("FinanceSystem_Dotnet.Models.User", "Creator")
                         .WithMany("CreatedTransactionTypes")
-                        .HasForeignKey("CreatorName")
+                        .HasForeignKey("CreatorId")
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 

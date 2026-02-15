@@ -8,8 +8,8 @@
         public int DocumentId { get; set; }
         public virtual Document Document { get; set; } = null!;
 
-        // Attached-by user name (FK to User.Name)
-        public string AttachedBy { get; set; } = null!;
+        // Attached-by user name (FK to User.ID)
+        public int AttachedBy { get; set; }
         public virtual User? AttachedByUser { get; set; }
 
         public DateTime AttachedAt { get; set; }

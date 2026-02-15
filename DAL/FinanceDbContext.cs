@@ -23,7 +23,7 @@ namespace FinanceSystem_Dotnet.DAL
 
             modelBuilder.Entity<User>(entity =>
             {
-                entity.HasKey(e => e.Name);
+                entity.HasKey(e => e.Id);
                 entity.Property(e => e.HashedPassword).IsRequired();
                 entity.Property(e => e.Role).IsRequired();
 
@@ -39,7 +39,7 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Manager)
                     .WithOne(u => u.ManagedDepartment)
-                    .HasForeignKey<Department>(e => e.ManagerName)
+                    .HasForeignKey<Department>(e => e.ManagerId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -51,7 +51,7 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Creator)
                     .WithMany(u => u.CreatedTransactions)
-                    .HasForeignKey(e => e.CreatorName)
+                    .HasForeignKey(e => e.CreatorId)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasOne(e => e.TransactionType)
@@ -94,7 +94,7 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Creator)
                     .WithMany(u => u.CreatedTransactionTypes)
-                    .HasForeignKey(e => e.CreatorName)
+                    .HasForeignKey(e => e.CreatorId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -105,7 +105,7 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Uploader)
                     .WithMany(u => u.UploadedDocuments)
-                    .HasForeignKey(e => e.UploaderName)
+                    .HasForeignKey(e => e.UploaderId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
 
@@ -116,12 +116,12 @@ namespace FinanceSystem_Dotnet.DAL
 
                 entity.HasOne(e => e.Sender)
                     .WithMany(u => u.SentForwards)
-                    .HasForeignKey(e => e.SenderName)
+                    .HasForeignKey(e => e.SenderId)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasOne(e => e.Receiver)
                     .WithMany(u => u.ReceivedForwards)
-                    .HasForeignKey(e => e.ReceiverName)
+                    .HasForeignKey(e => e.ReceiverId)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 entity.HasOne(e => e.Transaction)

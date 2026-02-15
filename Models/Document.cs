@@ -10,7 +10,7 @@ namespace FinanceSystem_Dotnet.Models
         public byte[] Content { get; set; }
         public DateTime UploadedAt { get; set; }
 
-        public string UploaderName { get; set; }
+        public int UploaderId { get; set; }
         public virtual User Uploader { get; set; }
 
         public virtual ICollection<Transaction> Transactions { get; set; }
