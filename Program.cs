@@ -1,5 +1,6 @@
 using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Services;
 using FinanceSystem_Dotnet.Transformers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
@@ -46,6 +47,7 @@ namespace FinanceSystem_Dotnet
                         Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Key"]!))
                 };
             });
+            builder.Services.AddScoped<IFinanceService, Services.Services>();
 
             var app = builder.Build();
 
