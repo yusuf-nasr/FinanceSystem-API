@@ -3,6 +3,23 @@ using FinanceSystem_Dotnet.Models;
 
 namespace FinanceSystem_Dotnet.DTOs
 {
+    public class UserCreateDTO
+    {
+        public string Name { get; set; }
+        public string Password { get; set; }
+        public Role role { get; set; }
+        public string DepartmentName { get; set; }
+    }
+    public class UserUpdateDTO: UserCreateDTO
+    {
+        public bool Active{ get; set; }
+    }
+    public class UserLoginDTO
+    {
+        public string Username { get; set; }
+        public string Password { get; set; }
+
+    }
     public class UserResponseDTO
     {
         public UserResponseDTO(User user)
