@@ -56,11 +56,11 @@ namespace FinanceSystem_Dotnet.Controllers
         [Authorize]
         public async Task<ActionResult> GetUsers()
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!services.IsAdmin(UID))
-            {
-                return Forbid();
-            }
+            //int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            //if (!services.IsAdmin(UID))
+            //{
+            //    return Forbid();
+            //}
             var users = await context.Users.Select(u => new UserResponseDTO(u)).ToListAsync();
             return Ok(users);
         }
@@ -69,11 +69,11 @@ namespace FinanceSystem_Dotnet.Controllers
         [Authorize]
         public async Task<ActionResult> GetUserById(int id)
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (context.Users.Find(UID).Role != Role.ADMIN || UID != id)
-            {
-                return Forbid();
-            }
+            //int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            //if (!services.IsAdmin(UID) || UID != id)
+            //{
+            //    return Forbid();
+            //}
             var user = await context.Users.FindAsync(id);
             if (user == null)
             {
@@ -87,7 +87,8 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<ActionResult> UpdateUser(int id, [FromBody] UserUpdateDTO request)
         {
             int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!services.IsAdmin(UID) || UID != id)
+            var isAdmin = services.IsAdmin(UID);
+            if (!isAdmin && UID != id)
             {
                 return Forbid();
             }
@@ -104,15 +105,15 @@ namespace FinanceSystem_Dotnet.Controllers
             {
                 user.HashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
             }
-            if (request.Active.ToString() != "")
+            if (request.Active.ToString() != "" && isAdmin)
             {
                 user.Active = request.Active;
             }
-            if (request.role.ToString() != "")
+            if (request.role.ToString() != "" && isAdmin)
             {
                 user.Role = request.role;
             }
-            if (!string.IsNullOrEmpty(request.DepartmentName))
+            if (!string.IsNullOrEmpty(request.DepartmentName) && isAdmin)
             {
                 user.DepartmentName = request.DepartmentName;
             }

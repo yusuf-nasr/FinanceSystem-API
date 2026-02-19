@@ -31,6 +31,9 @@ namespace FinanceSystem_Dotnet.Controllers
                 return Unauthorized(new { message = "Invalid username or password" });
             }
             var Jtoken = GenerateToken(user);
+
+            user.LastLogin = DateTime.UtcNow;
+            context.SaveChanges();
             return Ok(new { message = "Login successful",
                 user = new UserResponseDTO(user),
                 token = Jtoken
