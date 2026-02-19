@@ -8,7 +8,7 @@
     public class DeptUpdateDTO
     {
         public string Name { get; set; }
-        public int ManagerId { get; set; }
+        public int? ManagerId { get; set; }
     }
     public class DeptCreateDTO
     {

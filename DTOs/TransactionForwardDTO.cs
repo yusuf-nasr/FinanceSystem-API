@@ -1,4 +1,4 @@
-﻿using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Enums;
 using FinanceSystem_Dotnet.Models;
 
 namespace FinanceSystem_Dotnet.DTOs
@@ -13,9 +13,26 @@ namespace FinanceSystem_Dotnet.DTOs
         public bool ReceiverSeen { get; set; } = false;
         public DateTime ForwardedAt { get; set; }
         public DateTime UpdatedAt { get; set; }
-        public virtual User Sender { get; set; }
-        public virtual User Receiver { get; set; }
+        public UserResponseDTO Sender { get; set; }
+        public UserResponseDTO Receiver { get; set; }
         public int TransactionId { get; set; }
 
+    }
+
+    public class TransactionForwardCreateDTO
+    {
+        public int ReceiverId { get; set; }
+        public string? Comment { get; set; }
+    }
+
+    public class TransactionForwardUpdateDTO
+    {
+        public TransactionForwardStatus Status { get; set; }
+        public string? Comment { get; set; }
+    }
+
+    public class TransactionForwardSenderUpdateDTO
+    {
+        public string? Comment { get; set; }
     }
 }

@@ -27,8 +27,8 @@ namespace FinanceSystem_Dotnet.DTOs
             Id = user.Id;
             Name = user.Name;
             role = user.Role;
-            CreatedAt = user.CreatedAt;
-            LastLogin = user.LastLogin;
+            CreatedAt = user.CreatedAt.ToLocalTime();
+            LastLogin = user.LastLogin.Value.ToLocalTime();
             Active = user.Active;
             DepartmentName = user.DepartmentName;
 
