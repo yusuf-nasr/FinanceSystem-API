@@ -59,7 +59,7 @@ namespace FinanceSystem_Dotnet
                     options.SwaggerEndpoint("/openapi/v1.json", "Finance System API v1");
                 });
             }
-            app.UseMiddleware<Middlewares.RateLimitingMiddleware>();
+            //app.UseMiddleware<Middlewares.RateLimitingMiddleware>();//TODO
             app.UseHttpsRedirection();
             app.UseAuthentication();
             app.UseAuthorization();
