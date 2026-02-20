@@ -29,23 +29,28 @@ namespace FinanceSystem_Dotnet.Controllers
         [HttpGet]
         public async Task<ActionResult> FindAll(int transactionId, [FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
-            var result = await _forwardService.FindAllAsync(transactionId);
-            var paginated = PaginatedResult<TransactionForwardDTO>.Create(result, page, perPage);
-            return Ok(paginated);
+            var result = await _forwardService.FindAllPaginatedAsync(transactionId, page, perPage);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> FindOne(int transactionId, int id)
         {
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
             var result = await _forwardService.FindOneAsync(transactionId, id);
             if (result == null) return NotFound();
+
+            // Mark as seen
+            await _forwardService.MarkAsSeenAsync(transactionId, id, userId);
+
             return Ok(result);
         }
 
         [HttpPatch("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> UpdateSender(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
         {
-            var result = await _forwardService.UpdateSenderAsync(transactionId, id, dto);
+            var senderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var result = await _forwardService.UpdateSenderAsync(transactionId, id, dto, senderId);
             if (result == null) return NotFound();
             return Ok(result);
         }
@@ -53,7 +58,8 @@ namespace FinanceSystem_Dotnet.Controllers
         [HttpPost("{id}/response")]
         public async Task<ActionResult<TransactionForwardDTO>> Respond(int transactionId, int id, TransactionForwardUpdateDTO dto)
         {
-            var result = await _forwardService.RespondAsync(transactionId, id, dto);
+            var receiverId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var result = await _forwardService.RespondAsync(transactionId, id, dto, receiverId);
             if (result == null) return NotFound();
             return Ok(result);
         }
@@ -61,7 +67,8 @@ namespace FinanceSystem_Dotnet.Controllers
         [HttpPatch("{id}/response")]
         public async Task<ActionResult<TransactionForwardDTO>> UpdateResponse(int transactionId, int id, TransactionForwardUpdateDTO dto)
         {
-            var result = await _forwardService.UpdateResponseAsync(transactionId, id, dto);
+            var receiverId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var result = await _forwardService.UpdateResponseAsync(transactionId, id, dto, receiverId);
             if (result == null) return NotFound();
             return Ok(result);
         }
@@ -69,7 +76,8 @@ namespace FinanceSystem_Dotnet.Controllers
         [HttpDelete("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> Remove(int transactionId, int id)
         {
-            var result = await _forwardService.DeleteAsync(transactionId, id);
+            var senderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var result = await _forwardService.DeleteAsync(transactionId, id, senderId);
             if (result == null) return NotFound();
             return Ok(result);
         }

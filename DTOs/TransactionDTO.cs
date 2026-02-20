@@ -1,5 +1,4 @@
 ﻿using FinanceSystem_Dotnet.Enums;
-using FinanceSystem_Dotnet.Models;
 
 namespace FinanceSystem_Dotnet.DTOs
 {
@@ -15,8 +14,15 @@ namespace FinanceSystem_Dotnet.DTOs
         public int CreatorId { get; set; }
         public string TransactionTypeName { get; set; }
         public virtual ICollection<DocumentResponseDTO> Documents { get; set; }
-
     }
+
+    public class TransactionListResultDTO
+    {
+        public List<TransactionDTO> Data { get; set; } = new();
+        public PaginationMeta Pagination { get; set; } = new();
+        public Dictionary<string, int> Summary { get; set; } = new();
+    }
+
     public class TransactionCreateDTO
     {
         public string Title { get; set; }
@@ -25,6 +31,7 @@ namespace FinanceSystem_Dotnet.DTOs
         public TransactionPriority Priority { get; set; }
         public IEnumerable<int> DocumentIds { get; set; }
     }
+
     public class TransactionUpdateDTO
     {
         public string Title { get; set; }

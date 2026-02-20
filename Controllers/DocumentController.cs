@@ -39,8 +39,7 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<ActionResult> FindAll([FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
             var uploaderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-            var documents = await _documentService.GetDocumentsByUploaderAsync(uploaderId);
-            var paginated = PaginatedResult<DocumentResponseDTO>.Create(documents, page, perPage);
+            var paginated = await _documentService.GetDocumentsByUploaderPaginatedAsync(uploaderId, page, perPage);
             return Ok(paginated);
         }
 

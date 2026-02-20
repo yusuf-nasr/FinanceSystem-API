@@ -41,6 +41,17 @@ namespace FinanceSystem_Dotnet.Services
             }).ToListAsync();
         }
 
+        public async Task<PaginatedResult<TransactionTypeResponseDTO>> GetAllPaginatedAsync(int page, int perPage)
+        {
+            var query = _context.TransactionTypes.Select(t => new TransactionTypeResponseDTO
+            {
+                CreatorId = t.CreatorId,
+                Name = t.Name
+            });
+
+            return await PaginatedResult<TransactionTypeResponseDTO>.CreateAsync(query, page, perPage);
+        }
+
         public async Task<TransactionTypeResponseDTO?> GetByNameAsync(string name)
         {
             var transactionType = await _context.TransactionTypes.FirstOrDefaultAsync(t => t.Name == name);

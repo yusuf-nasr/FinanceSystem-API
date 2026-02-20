@@ -1,5 +1,6 @@
 using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Filters;
 using FinanceSystem_Dotnet.Services;
 using FinanceSystem_Dotnet.Transformers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,7 +17,10 @@ namespace FinanceSystem_Dotnet
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
-            builder.Services.AddControllers();
+            builder.Services.AddControllers(options =>
+            {
+                options.Filters.Add<ApiExceptionFilter>();
+            });
             builder.Services.AddDbContext<FinanceDbContext>(options =>
                 options.UseLazyLoadingProxies().UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 

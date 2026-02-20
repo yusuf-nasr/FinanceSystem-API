@@ -6,6 +6,7 @@ namespace FinanceSystem_Dotnet.Services
     {
         Task<(bool Success, string Message)> CreateDepartmentAsync(DeptCreateDTO request);
         Task<List<DeptResponseDTO>> GetAllDepartmentsAsync();
+        Task<PaginatedResult<DeptResponseDTO>> GetAllDepartmentsPaginatedAsync(int page, int perPage);
         Task<DeptResponseDTO?> GetDepartmentByNameAsync(string name);
         Task<(bool Success, string Message)> UpdateDepartmentAsync(string name, DeptUpdateDTO request);
         Task<(bool Success, string Message)> DeleteDepartmentAsync(string name);

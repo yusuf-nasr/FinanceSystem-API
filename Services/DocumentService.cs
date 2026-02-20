@@ -54,6 +54,22 @@ namespace FinanceSystem_Dotnet.Services
             return documents.Select(MapToResponse).ToList();
         }
 
+        public async Task<PaginatedResult<DocumentResponseDTO>> GetDocumentsByUploaderPaginatedAsync(int uploaderId, int page, int perPage)
+        {
+            var query = _context.Documents
+                .Where(d => d.UploaderId == uploaderId)
+                .Select(d => new DocumentResponseDTO
+                {
+                    Id = d.Id,
+                    Title = d.Title,
+                    URI = $"/api/v1/documents/{d.Id}/download",
+                    UploadedAt = d.UploadedAt,
+                    UploaderId = d.UploaderId
+                });
+
+            return await PaginatedResult<DocumentResponseDTO>.CreateAsync(query, page, perPage);
+        }
+
         public async Task<DocumentResponseDTO?> GetDocumentByIdAsync(int id)
         {
             var document = await _context.Documents.FindAsync(id);
@@ -85,7 +101,7 @@ namespace FinanceSystem_Dotnet.Services
             {
                 Id = document.Id,
                 Title = document.Title,
-                URI = $"/api/v1/Document/{document.Id}/download",
+                URI = $"/api/v1/documents/{document.Id}/download",
                 UploadedAt = document.UploadedAt,
                 UploaderId = document.UploaderId
             };

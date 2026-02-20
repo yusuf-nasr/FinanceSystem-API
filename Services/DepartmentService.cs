@@ -39,6 +39,17 @@ namespace FinanceSystem_Dotnet.Services
             }).ToListAsync();
         }
 
+        public async Task<PaginatedResult<DeptResponseDTO>> GetAllDepartmentsPaginatedAsync(int page, int perPage)
+        {
+            var query = _context.Departments.Select(d => new DeptResponseDTO
+            {
+                Name = d.Name,
+                ManagerId = d.ManagerId
+            });
+
+            return await PaginatedResult<DeptResponseDTO>.CreateAsync(query, page, perPage);
+        }
+
         public async Task<DeptResponseDTO?> GetDepartmentByNameAsync(string name)
         {
             return await _context.Departments

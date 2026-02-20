@@ -41,6 +41,23 @@ namespace FinanceSystem_Dotnet.Services
             return users.Select(u => new UserResponseDTO(u)).ToList();
         }
 
+        public async Task<PaginatedResult<UserResponseDTO>> GetAllUsersPaginatedAsync(int page, int perPage)
+        {
+            var query = _context.Users
+                .Select(u => new UserResponseDTO
+                {
+                    Id = u.Id,
+                    Name = u.Name,
+                    role = u.Role,
+                    CreatedAt = u.CreatedAt,
+                    LastLogin = u.LastLogin,
+                    Active = u.Active,
+                    DepartmentName = u.DepartmentName
+                });
+
+            return await PaginatedResult<UserResponseDTO>.CreateAsync(query, page, perPage);
+        }
+
         public async Task<UserResponseDTO?> GetUserByIdAsync(int id)
         {
             var user = await _context.Users.FindAsync(id);

@@ -22,6 +22,8 @@ namespace FinanceSystem_Dotnet.DTOs
     }
     public class UserResponseDTO
     {
+        public UserResponseDTO() { }
+
         public UserResponseDTO(User user)
         {
             Id = user.Id;

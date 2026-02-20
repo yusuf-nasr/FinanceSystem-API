@@ -1,6 +1,7 @@
 using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.DTOs;
 using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -17,6 +18,9 @@ namespace FinanceSystem_Dotnet.Services
 
         public async Task<TransactionForwardDTO?> CreateAsync(int transactionId, TransactionForwardCreateDTO dto, int senderId)
         {
+            // Validate forward creation
+            await ValidateForwardCreation(transactionId, senderId);
+
             var forward = new TransactionForward
             {
                 TransactionId = transactionId,
@@ -53,6 +57,19 @@ namespace FinanceSystem_Dotnet.Services
             return forwards.Select(MapToDTO).ToList();
         }
 
+        public async Task<PaginatedResult<TransactionForwardDTO>> FindAllPaginatedAsync(int transactionId, int page, int perPage)
+        {
+            var forwards = await _context.TransactionForwards
+                .Include(f => f.Sender)
+                .Include(f => f.Receiver)
+                .Where(f => f.TransactionId == transactionId)
+                .OrderByDescending(f => f.ForwardedAt)
+                .ToListAsync();
+
+            var dtos = forwards.Select(MapToDTO).ToList();
+            return PaginatedResult<TransactionForwardDTO>.Create(dtos, page, perPage);
+        }
+
         public async Task<TransactionForwardDTO?> FindOneAsync(int transactionId, int id)
         {
             var forward = await _context.TransactionForwards
@@ -64,7 +81,28 @@ namespace FinanceSystem_Dotnet.Services
             return MapToDTO(forward);
         }
 
-        public async Task<TransactionForwardDTO?> UpdateSenderAsync(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
+        public async Task MarkAsSeenAsync(int transactionId, int forwardId, int userId)
+        {
+            var forward = await _context.TransactionForwards
+                .FirstOrDefaultAsync(f => f.Id == forwardId && f.TransactionId == transactionId);
+
+            if (forward == null) return;
+
+            if (forward.SenderId == userId && !forward.SenderSeen)
+            {
+                forward.SenderSeen = true;
+                forward.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+            else if (forward.ReceiverId == userId && !forward.ReceiverSeen)
+            {
+                forward.ReceiverSeen = true;
+                forward.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task<TransactionForwardDTO?> UpdateSenderAsync(int transactionId, int id, TransactionForwardSenderUpdateDTO dto, int senderId)
         {
             var forward = await _context.TransactionForwards
                 .Include(f => f.Sender)
@@ -72,6 +110,14 @@ namespace FinanceSystem_Dotnet.Services
                 .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
 
             if (forward == null) return null;
+
+            // Validate sender identity
+            if (forward.SenderId != senderId)
+                throw new ApiException(403, ErrorCode.NOT_FORWARD_SENDER);
+
+            // Can only update if forward hasn't been responded to
+            if (forward.Status != TransactionForwardStatus.WAITING)
+                throw new ApiException(403, ErrorCode.FORWARD_ALREADY_RESPONDED);
 
             forward.SenderComment = dto.Comment;
             forward.UpdatedAt = DateTime.UtcNow;
@@ -80,7 +126,7 @@ namespace FinanceSystem_Dotnet.Services
             return MapToDTO(forward);
         }
 
-        public async Task<TransactionForwardDTO?> RespondAsync(int transactionId, int id, TransactionForwardUpdateDTO dto)
+        public async Task<TransactionForwardDTO?> RespondAsync(int transactionId, int id, TransactionForwardUpdateDTO dto, int receiverId)
         {
             var forward = await _context.TransactionForwards
                 .Include(f => f.Sender)
@@ -88,6 +134,17 @@ namespace FinanceSystem_Dotnet.Services
                 .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
 
             if (forward == null) return null;
+
+            // Validate receiver identity
+            if (forward.ReceiverId != receiverId)
+                throw new ApiException(403, ErrorCode.NOT_FORWARD_RECEIVER);
+
+            // Sender must not have seen (otherwise it's too late to respond fresh)
+            if (forward.SenderSeen && forward.Status != TransactionForwardStatus.WAITING)
+                throw new ApiException(403, ErrorCode.FORWARD_ALREADY_RESPONDED);
+
+            // Must be the latest forward
+            await ValidateIsLatestForward(transactionId, id);
 
             forward.Status = dto.Status;
             forward.ReceiverComment = dto.Comment;
@@ -98,7 +155,7 @@ namespace FinanceSystem_Dotnet.Services
             return MapToDTO(forward);
         }
 
-        public async Task<TransactionForwardDTO?> UpdateResponseAsync(int transactionId, int id, TransactionForwardUpdateDTO dto)
+        public async Task<TransactionForwardDTO?> UpdateResponseAsync(int transactionId, int id, TransactionForwardUpdateDTO dto, int receiverId)
         {
             var forward = await _context.TransactionForwards
                 .Include(f => f.Sender)
@@ -106,6 +163,21 @@ namespace FinanceSystem_Dotnet.Services
                 .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
 
             if (forward == null) return null;
+
+            // Validate receiver identity
+            if (forward.ReceiverId != receiverId)
+                throw new ApiException(403, ErrorCode.NOT_FORWARD_RECEIVER);
+
+            // Forward must have been responded to already
+            if (forward.Status == TransactionForwardStatus.WAITING)
+                throw new ApiException(403, ErrorCode.FORWARD_NOT_RESPONDED);
+
+            // Sender must not have seen the response yet
+            if (forward.SenderSeen)
+                throw new ApiException(403, ErrorCode.FORWARD_ALREADY_SEEN);
+
+            // Must be the latest forward
+            await ValidateIsLatestForward(transactionId, id);
 
             forward.Status = dto.Status;
             forward.ReceiverComment = dto.Comment;
@@ -116,7 +188,7 @@ namespace FinanceSystem_Dotnet.Services
             return MapToDTO(forward);
         }
 
-        public async Task<TransactionForwardDTO?> DeleteAsync(int transactionId, int id)
+        public async Task<TransactionForwardDTO?> DeleteAsync(int transactionId, int id, int senderId)
         {
             var forward = await _context.TransactionForwards
                 .Include(f => f.Sender)
@@ -124,11 +196,61 @@ namespace FinanceSystem_Dotnet.Services
                 .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
 
             if (forward == null) return null;
+
+            // Only sender can undo (delete) a forward
+            if (forward.SenderId != senderId)
+                throw new ApiException(403, ErrorCode.NOT_FORWARD_SENDER);
+
+            // Can't undo if receiver has already seen it
+            if (forward.ReceiverSeen)
+                throw new ApiException(403, ErrorCode.FORWARD_ALREADY_SEEN);
 
             _context.TransactionForwards.Remove(forward);
             await _context.SaveChangesAsync();
 
             return MapToDTO(forward);
+        }
+
+        private async Task ValidateForwardCreation(int transactionId, int senderId)
+        {
+            var transaction = await _context.Transactions
+                .Include(t => t.Forwards)
+                .FirstOrDefaultAsync(t => t.Id == transactionId);
+
+            if (transaction == null)
+                throw new ApiException(404, ErrorCode.TRANSACTION_NOT_FOUND);
+
+            var forwards = transaction.Forwards?.OrderByDescending(f => f.Id).ToList() ?? new List<TransactionForward>();
+
+            if (!forwards.Any())
+            {
+                // No forwards exist — only the creator can create the first forward
+                if (transaction.CreatorId != senderId)
+                    throw new ApiException(403, ErrorCode.NOT_TRANSACTION_CREATOR);
+            }
+            else
+            {
+                var latestForward = forwards.First();
+
+                // Only the latest forward's receiver can re-forward
+                if (latestForward.ReceiverId != senderId)
+                    throw new ApiException(403, ErrorCode.NOT_LATEST_RECEIVER);
+
+                // The latest forward must have been responded to before re-forwarding
+                if (latestForward.Status == TransactionForwardStatus.WAITING)
+                    throw new ApiException(403, ErrorCode.FORWARD_NOT_RESPONDED);
+            }
+        }
+
+        private async Task ValidateIsLatestForward(int transactionId, int forwardId)
+        {
+            var latestForward = await _context.TransactionForwards
+                .Where(f => f.TransactionId == transactionId)
+                .OrderByDescending(f => f.Id)
+                .FirstOrDefaultAsync();
+
+            if (latestForward == null || latestForward.Id != forwardId)
+                throw new ApiException(403, ErrorCode.NOT_LATEST_RECEIVER);
         }
 
         private TransactionForwardDTO MapToDTO(TransactionForward f)

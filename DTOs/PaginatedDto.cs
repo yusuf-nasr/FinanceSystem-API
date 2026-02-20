@@ -1,3 +1,5 @@
+using Microsoft.EntityFrameworkCore;
+
 namespace FinanceSystem_Dotnet.DTOs
 {
     public class PaginationMeta
@@ -36,11 +38,11 @@ namespace FinanceSystem_Dotnet.DTOs
             };
         }
 
-        public static PaginatedResult<T> CreateAsync(IQueryable<T> query, int page, int perPage)
+        public static async Task<PaginatedResult<T>> CreateAsync(IQueryable<T> query, int page, int perPage)
         {
-            var totalCount = query.Count();
+            var totalCount = await query.CountAsync();
             var lastPage = (int)Math.Ceiling((double)totalCount / perPage);
-            var items = query.Skip((page - 1) * perPage).Take(perPage).ToList();
+            var items = await query.Skip((page - 1) * perPage).Take(perPage).ToListAsync();
 
             return new PaginatedResult<T>
             {

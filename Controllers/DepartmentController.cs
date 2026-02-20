@@ -41,8 +41,7 @@ namespace FinanceSystem_Dotnet.Controllers
         [Authorize]
         public async Task<IActionResult> GetDepartments([FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
-            var departments = await _departmentService.GetAllDepartmentsAsync();
-            var paginated = PaginatedResult<DeptResponseDTO>.Create(departments, page, perPage);
+            var paginated = await _departmentService.GetAllDepartmentsPaginatedAsync(page, perPage);
             return Ok(paginated);
         }
 

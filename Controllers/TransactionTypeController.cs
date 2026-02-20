@@ -36,8 +36,7 @@ namespace FinanceSystem_Dotnet.Controllers
         [Authorize]
         public async Task<IActionResult> GetTransactionTypes([FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
-            var result = await _transactionTypeService.GetAllAsync();
-            var paginated = PaginatedResult<TransactionTypeResponseDTO>.Create(result, page, perPage);
+            var paginated = await _transactionTypeService.GetAllPaginatedAsync(page, perPage);
             return Ok(paginated);
         }
 

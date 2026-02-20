@@ -1,5 +1,6 @@
 using FinanceSystem_Dotnet.DTOs;
 using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -37,21 +38,27 @@ namespace FinanceSystem_Dotnet.Controllers
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
             var isAdmin = _financeService.IsAdmin(userId);
 
-            var result = await _transactionService.FindAllAsync(query, userId, isAdmin);
-            if (result == null)
-                return Forbid();
-
-            var paginated = PaginatedResult<TransactionDTO>.Create(result, page, perPage);
-            return Ok(paginated);
+            var result = await _transactionService.FindAllAsync(query, userId, isAdmin, page, perPage);
+            return Ok(result);
         }
 
         [HttpGet("{id}")]
         [Authorize]
         public async Task<ActionResult<TransactionDTO>> FindOne(int id)
         {
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var isAdmin = _financeService.IsAdmin(userId);
+
             var result = await _transactionService.FindOneAsync(id);
             if (result == null)
                 return NotFound();
+
+            // Check participant permission (admin can always view)
+            if (!isAdmin && !await _transactionService.IsParticipant(id, userId))
+                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
+
+            // Mark as seen
+            await _transactionService.MarkAsSeenAsync(id, userId);
 
             return Ok(result);
         }
@@ -68,7 +75,7 @@ namespace FinanceSystem_Dotnet.Controllers
 
             if (!(_financeService.IsAdmin(creatorId) || transaction.CreatorId == creatorId))
             {
-                return Forbid("only admins or creator can update transaction");
+                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_CREATOR);
             }
 
             var result = await _transactionService.UpdateAsync(id, dto, creatorId);
@@ -89,7 +96,7 @@ namespace FinanceSystem_Dotnet.Controllers
 
             if (!(_financeService.IsAdmin(userId) || transaction.CreatorId == userId))
             {
-                return Forbid("only admins or creator can delete transaction");
+                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_CREATOR);
             }
 
             var result = await _transactionService.DeleteAsync(id);
@@ -103,6 +110,14 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<ActionResult<TransactionDTO>> AttachDocument(int id, int documentId)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+
+            // Check participant permission
+            if (!await _transactionService.IsParticipant(id, userId))
+                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
+
+            // Check forward restriction (can't edit if forward already seen/responded)
+            await _transactionService.CheckRestriction(id, userId);
+
             var result = await _transactionService.AttachDocumentAsync(id, documentId, userId);
             return Ok(result);
         }
@@ -111,7 +126,16 @@ namespace FinanceSystem_Dotnet.Controllers
         [Authorize]
         public async Task<ActionResult<TransactionDTO>> DetachDocument(int id, int documentId)
         {
-            var result = await _transactionService.DetachDocumentAsync(id, documentId);
+            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+
+            // Check participant permission
+            if (!await _transactionService.IsParticipant(id, userId))
+                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
+
+            // Check forward restriction
+            await _transactionService.CheckRestriction(id, userId);
+
+            var result = await _transactionService.DetachDocumentAsync(id, documentId, userId);
             return Ok(result);
         }
     }

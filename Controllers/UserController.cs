@@ -1,4 +1,6 @@
 ﻿using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -41,8 +43,7 @@ namespace FinanceSystem_Dotnet.Controllers
         [Authorize]
         public async Task<ActionResult> GetUsers([FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
-            var users = await _userService.GetAllUsersAsync();
-            var paginated = PaginatedResult<UserResponseDTO>.Create(users, page, perPage);
+            var paginated = await _userService.GetAllUsersPaginatedAsync(page, perPage);
             return Ok(paginated);
         }
 
@@ -67,6 +68,21 @@ namespace FinanceSystem_Dotnet.Controllers
             if (!isAdmin && UID != id)
             {
                 return Forbid();
+            }
+
+            // Non-admin users can only update 'name' and 'password'
+            if (!isAdmin)
+            {
+                var forbiddenFields = new List<string>();
+                if (request.role != default) forbiddenFields.Add("role");
+                if (request.Active != default) forbiddenFields.Add("active");
+                if (!string.IsNullOrEmpty(request.DepartmentName)) forbiddenFields.Add("departmentName");
+
+                if (forbiddenFields.Count > 0)
+                {
+                    throw new ApiException(403, ErrorCode.RESTRICTED_FIELD_UPDATE,
+                        new Dictionary<string, object> { { "fields", string.Join(", ", forbiddenFields) } });
+                }
             }
 
             var result = await _userService.UpdateUserAsync(id, request, isAdmin);
