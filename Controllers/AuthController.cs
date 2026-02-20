@@ -1,62 +1,58 @@
-﻿using FinanceSystem_Dotnet.DAL;
-using FinanceSystem_Dotnet.DTOs;
-using FinanceSystem_Dotnet.Models;
+﻿using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.IdentityModel.Tokens;
-using System.IdentityModel.Tokens.Jwt;
-using System.Security.Claims;
-using System.Text;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/[controller]")]
+    [Route("api/v1/auth")]
     [ApiController]
     public class AuthController : ControllerBase
     {
-        private readonly FinanceDbContext context;
-        private readonly IConfiguration _config;
+        private readonly IAuthService _authService;
 
-        public AuthController(FinanceDbContext _context, IConfiguration config)
+        public AuthController(IAuthService authService)
         {
-            context = _context;
-            _config = config;
+            _authService = authService;
         }
 
         [HttpPost("login")]
         public ActionResult Login([FromBody] UserLoginDTO request)
         {
-            var user = context.Users.FirstOrDefault(u => u.Name == request.Username);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.HashedPassword))
+            var result = _authService.Login(request.Name, request.Password);
+            if (result == null)
             {
                 return Unauthorized(new { message = "Invalid username or password" });
             }
-            var Jtoken = GenerateToken(user);
 
-            user.LastLogin = DateTime.UtcNow;
-            context.SaveChanges();
-            return Ok(new { message = "Login successful",
-                user = new UserResponseDTO(user),
-                token = Jtoken
+            return Ok(new
+            {
+                message = "Login successful",
+                user = result.Value.User,
+                access_token = result.Value.AccessToken,
+                refresh_token = result.Value.RefreshToken
             });
         }
-        private string GenerateToken(User user)
+
+        [HttpPost("refresh")]
+        public ActionResult Refresh([FromBody] RefreshTokenDto request)
         {
-            var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_config["Jwt:Key"]!));
-            var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
-            var claims = new[]
+            var result = _authService.Refresh(request.RefreshToken);
+            if (result == null)
             {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            };
+                return Unauthorized(new { message = "Invalid or expired refresh token" });
+            }
 
-            var token = new JwtSecurityToken(
-                issuer: _config["Jwt:Issuer"],
-                audience: _config["Jwt:Audience"],
-                claims: claims,
-                expires: DateTime.Now.AddDays(1),
-                signingCredentials: credentials);
-
-            return new JwtSecurityTokenHandler().WriteToken(token);
+            return Ok(new
+            {
+                user = result.Value.User,
+                access_token = result.Value.AccessToken,
+                refresh_token = result.Value.RefreshToken
+            });
         }
+    }
+
+    public class RefreshTokenDto
+    {
+        public string RefreshToken { get; set; }
     }
 }

@@ -1,85 +1,61 @@
-﻿using FinanceSystem_Dotnet.DAL;
-using FinanceSystem_Dotnet.DTOs;
-using FinanceSystem_Dotnet.Enums;
+﻿using FinanceSystem_Dotnet.DTOs;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using System.Threading.Tasks;
-//int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/[controller]")]
+    [Route("api/v1/users")]
     [ApiController]
     public class UserController : ControllerBase
     {
-        private readonly FinanceDbContext context;
-        private readonly IFinanceService services;
+        private readonly IUserService _userService;
+        private readonly IFinanceService _financeService;
 
-        public UserController(FinanceDbContext _context, IFinanceService services)
+        public UserController(IUserService userService, IFinanceService financeService)
         {
-            context = _context;
-            this.services = services;
+            _userService = userService;
+            _financeService = financeService;
         }
+
         [Authorize]
-        [HttpPost("create")]
+        [HttpPost]
         public async Task<ActionResult> CreateUser([FromBody] UserCreateDTO request)
         {
             int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!services.IsAdmin(UID))
+            if (!_financeService.IsAdmin(UID))
             {
                 return Forbid();
             }
-            if (context.Users.Any(u => u.Name == request.Name))
+
+            var result = await _userService.CreateUserAsync(request);
+            if (!result.Success)
             {
-                return BadRequest(new { message = "Username already exists" });
+                return BadRequest(new { message = result.Message });
             }
-            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
-            context.Users.Add(new Models.User
-            {
-                Name = request.Name,
-                HashedPassword = hashedPassword,
-                CreatedAt = DateTime.UtcNow,
-                Active = true,
-                Role = request.role,
-                DepartmentName = request.DepartmentName
-            });
-            await context.SaveChangesAsync();
-            return Ok(new { message = $"User {request.Name} created successfully" });
+            return Ok(new { message = result.Message });
         }
 
         [HttpGet]
         [Authorize]
-        public async Task<ActionResult> GetUsers()
+        public async Task<ActionResult> GetUsers([FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
-            //int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            //if (!services.IsAdmin(UID))
-            //{
-            //    return Forbid();
-            //}
-            var users = await context.Users.Select(u => new UserResponseDTO(u)).ToListAsync();
-            return Ok(users);
+            var users = await _userService.GetAllUsersAsync();
+            var paginated = PaginatedResult<UserResponseDTO>.Create(users, page, perPage);
+            return Ok(paginated);
         }
 
         [HttpGet("{id}")]
         [Authorize]
         public async Task<ActionResult> GetUserById(int id)
         {
-            //int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            //if (!services.IsAdmin(UID) || UID != id)
-            //{
-            //    return Forbid();
-            //}
-            var user = await context.Users.FindAsync(id);
+            var user = await _userService.GetUserByIdAsync(id);
             if (user == null)
             {
                 return NotFound(new { message = "User not found" });
             }
-            return Ok(new UserResponseDTO(user));
+            return Ok(user);
         }
 
         [HttpPatch("{id}")]
@@ -87,57 +63,36 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<ActionResult> UpdateUser(int id, [FromBody] UserUpdateDTO request)
         {
             int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            var isAdmin = services.IsAdmin(UID);
+            var isAdmin = _financeService.IsAdmin(UID);
             if (!isAdmin && UID != id)
             {
                 return Forbid();
             }
-            var user = await context.Users.FindAsync(id);
-            if (user == null)
+
+            var result = await _userService.UpdateUserAsync(id, request, isAdmin);
+            if (!result.Success)
             {
-                return NotFound(new { message = "User not found" });
+                return NotFound(new { message = result.Message });
             }
-            if (!string.IsNullOrEmpty(request.Name))
-            {
-                user.Name = request.Name;
-            }
-            if (!string.IsNullOrEmpty(request.Password))
-            {
-                user.HashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
-            }
-            if (request.Active.ToString() != "" && isAdmin)
-            {
-                user.Active = request.Active;
-            }
-            if (request.role.ToString() != "" && isAdmin)
-            {
-                user.Role = request.role;
-            }
-            if (!string.IsNullOrEmpty(request.DepartmentName) && isAdmin)
-            {
-                user.DepartmentName = request.DepartmentName;
-            }
-            await context.SaveChangesAsync();
-            return Ok(new { message = $"User {user.Name} updated successfully" });
+            return Ok(new { message = result.Message });
         }
+
         [HttpDelete("{id}")]
         [Authorize]
         public async Task<ActionResult> DeleteUser(int id)
         {
             int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!services.IsAdmin(UID))
+            if (!_financeService.IsAdmin(UID))
             {
                 return Forbid();
             }
-            var user = await context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound(new { message = "User not found" });
-            }
-            context.Users.Remove(user);
-            await context.SaveChangesAsync();
-            return Ok(new { message = $"User {user.Name} deleted successfully" });
-        }
 
+            var result = await _userService.DeleteUserAsync(id);
+            if (!result.Success)
+            {
+                return NotFound(new { message = result.Message });
+            }
+            return Ok(new { message = result.Message });
+        }
     }
 }

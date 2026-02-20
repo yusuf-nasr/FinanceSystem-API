@@ -48,6 +48,13 @@ namespace FinanceSystem_Dotnet
                 };
             });
             builder.Services.AddScoped<IFinanceService, Services.Services>();
+            builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<IUserService, UserService>();
+            builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+            builder.Services.AddScoped<IDocumentService, DocumentService>();
+            builder.Services.AddScoped<ITransactionService, TransactionService>();
+            builder.Services.AddScoped<ITransactionForwardService, TransactionForwardService>();
+            builder.Services.AddScoped<ITransactionTypeService, TransactionTypeService>();
 
             var app = builder.Build();
 

@@ -1,27 +1,24 @@
-using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.DTOs;
 using FinanceSystem_Dotnet.Enums;
-using FinanceSystem_Dotnet.Models;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/[controller]")]
+    [Route("api/v1/transactions")]
     [ApiController]
     [Authorize]
     public class TransactionController : ControllerBase
     {
-        private readonly FinanceDbContext _context;
-        private readonly IFinanceService services;
+        private readonly ITransactionService _transactionService;
+        private readonly IFinanceService _financeService;
 
-        public TransactionController(FinanceDbContext context, IFinanceService services)
+        public TransactionController(ITransactionService transactionService, IFinanceService financeService)
         {
-            _context = context;
-            this.services = services;
+            _transactionService = transactionService;
+            _financeService = financeService;
         }
 
         [HttpPost]
@@ -29,247 +26,93 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<ActionResult<TransactionDTO>> Create(TransactionCreateDTO dto)
         {
             var creatorId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-
-            var transaction = new Transaction
-            {
-                Title = dto.Title,
-                Description = dto.Description,
-                TransactionTypeName = dto.TransactionTypeName,
-                Priority = dto.Priority,
-                CreatorId = creatorId,
-                CreatedAt = DateTime.UtcNow,
-                Fulfilled = false
-            };
-
-            _context.Transactions.Add(transaction);
-            await _context.SaveChangesAsync();
-
-            if (dto.DocumentIds != null && dto.DocumentIds.Any())
-            {
-                foreach (var docId in dto.DocumentIds)
-                {
-                    _context.TransactionDocuments.Add(new TransactionDocument
-                    {
-                        TransactionId = transaction.Id,
-                        DocumentId = docId,
-                        AttachedBy = creatorId,
-                        AttachedAt = DateTime.UtcNow
-                    });
-                }
-                await _context.SaveChangesAsync();
-            }
-
-            return CreatedAtAction(nameof(FindOne), new { id = transaction.Id }, await MapToDTO(transaction));
+            var result = await _transactionService.CreateAsync(dto, creatorId);
+            return CreatedAtAction(nameof(FindOne), new { id = result.Id }, result);
         }
 
         [HttpGet]
         [Authorize]
-
-        public async Task<ActionResult<IEnumerable<TransactionDTO>>> FindAll([FromQuery] TransactionQuery? query)
+        public async Task<ActionResult> FindAll([FromQuery] TransactionQuery? query, [FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var isAdmin = _financeService.IsAdmin(userId);
 
-            IQueryable<Transaction> transactionsQuery = _context.Transactions
-                .Include(t => t.Documents)
-                .Include(t => t.Forwards);
+            var result = await _transactionService.FindAllAsync(query, userId, isAdmin);
+            if (result == null)
+                return Forbid();
 
-            if (query == TransactionQuery.All)
-            {
-                var user = await _context.Users.FindAsync(userId);
-                if (user?.Role != Role.ADMIN)
-                    return Forbid();
-            }
-            else if (query == TransactionQuery.Inbox)
-            {
-                transactionsQuery = transactionsQuery.Where(t =>
-                    (t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault() != null && t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault().ReceiverId == userId) ||
-                    (!t.Forwards.Any() && t.CreatorId == userId)
-                );
-            }
-            else if (query == TransactionQuery.Outgoing)
-            {
-                transactionsQuery = transactionsQuery.Where(t =>
-                    t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault() != null && t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault().SenderId == userId
-                );
-            }
-            else // Archive or default
-            {
-                transactionsQuery = transactionsQuery.Where(t =>
-                    (t.CreatorId == userId && (!t.Forwards.Any() || t.Forwards.Any(f => f.SenderId != userId && f.ReceiverId != userId))) ||
-                    t.Forwards.Any(f => f.SenderId == userId || f.ReceiverId == userId)
-                );
-            }
-
-            var list = await transactionsQuery.OrderByDescending(t => t.CreatedAt).ToListAsync();
-            var dtos = list.Select(t => MapToDTOManual(t)).ToList();
-
-            return Ok(dtos);
+            var paginated = PaginatedResult<TransactionDTO>.Create(result, page, perPage);
+            return Ok(paginated);
         }
 
         [HttpGet("{id}")]
         [Authorize]
-
         public async Task<ActionResult<TransactionDTO>> FindOne(int id)
         {
-            var transaction = await _context.Transactions
-                .Include(t => t.Documents)
-                .Include(t => t.Forwards)
-                .FirstOrDefaultAsync(t => t.Id == id);
-
-            if (transaction == null)
+            var result = await _transactionService.FindOneAsync(id);
+            if (result == null)
                 return NotFound();
 
-            return Ok(MapToDTOManual(transaction));
+            return Ok(result);
         }
 
         [HttpPatch("{id}")]
         [Authorize]
-
         public async Task<ActionResult<TransactionDTO>> Update(int id, TransactionUpdateDTO dto)
         {
             var creatorId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
 
+            // Check permission: must be admin or creator
+            var transaction = await _transactionService.FindOneAsync(id);
+            if (transaction == null) return NotFound();
 
-            var transaction = await _context.Transactions
-                .Include(t => t.Documents)
-                .FirstOrDefaultAsync(t => t.Id == id);
-
-
-            if (!(services.IsAdmin(creatorId) || transaction.Id == creatorId))
+            if (!(_financeService.IsAdmin(creatorId) || transaction.CreatorId == creatorId))
             {
                 return Forbid("only admins or creator can update transaction");
             }
 
-            if (transaction == null) return NotFound();
-            if (dto.Title != null) transaction.Title = dto.Title;
-            if (dto.Description != null) transaction.Description = dto.Description;
-            if (dto.TransactionTypeName != null) transaction.TransactionTypeName = dto.TransactionTypeName;
-            transaction.Priority = dto.Priority;
-            transaction.Fulfilled = dto.Fulfilled;
+            var result = await _transactionService.UpdateAsync(id, dto, creatorId);
+            if (result == null) return NotFound();
 
-            if (dto.DocumentIds != null)
-            {
-                var existingDocs = await _context.TransactionDocuments.Where(td => td.TransactionId == id).ToListAsync();
-                _context.TransactionDocuments.RemoveRange(existingDocs);
-
-                foreach (var docId in dto.DocumentIds)
-                {
-                    _context.TransactionDocuments.Add(new TransactionDocument
-                    {
-                        TransactionId = id,
-                        DocumentId = docId,
-                        AttachedBy = creatorId,
-                        AttachedAt = DateTime.UtcNow
-                    });
-                }
-            }
-
-            await _context.SaveChangesAsync();
-
-            // Reload to get fresh navigation properties (Documents may have changed)
-            transaction = await _context.Transactions
-                .Include(t => t.Documents)
-                .Include(t => t.Forwards)
-                .FirstAsync(t => t.Id == id);
-
-            return Ok(MapToDTOManual(transaction));
+            return Ok(result);
         }
 
         [HttpDelete("{id}")]
         [Authorize]
-
         public async Task<ActionResult<TransactionDTO>> Remove(int id)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
 
-            var transaction = await _context.Transactions
-                .Include(t => t.Documents)
-                .Include(t => t.Forwards)
-                .FirstOrDefaultAsync(t => t.Id == id);
+            // Check permission: must be admin or creator
+            var transaction = await _transactionService.FindOneAsync(id);
+            if (transaction == null) return NotFound();
 
-            if (!(services.IsAdmin(userId) || transaction.Id == userId))
+            if (!(_financeService.IsAdmin(userId) || transaction.CreatorId == userId))
             {
                 return Forbid("only admins or creator can delete transaction");
             }
 
-            if (transaction == null)
-                return NotFound();
+            var result = await _transactionService.DeleteAsync(id);
+            if (result == null) return NotFound();
 
-            _context.Transactions.Remove(transaction);
-            await _context.SaveChangesAsync();
-
-            return Ok(MapToDTOManual(transaction));
+            return Ok(result);
         }
 
         [HttpPost("{id}/document/{documentId}")]
         [Authorize]
-
         public async Task<ActionResult<TransactionDTO>> AttachDocument(int id, int documentId)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-            
-            var existing = await _context.TransactionDocuments
-                .FirstOrDefaultAsync(td => td.TransactionId == id && td.DocumentId == documentId);
-
-            if (existing == null)
-            {
-                _context.TransactionDocuments.Add(new TransactionDocument
-                {
-                    TransactionId = id,
-                    DocumentId = documentId,
-                    AttachedBy = userId,
-                    AttachedAt = DateTime.UtcNow
-                });
-                await _context.SaveChangesAsync();
-            }
-
-            return (await FindOne(id)).Result;
+            var result = await _transactionService.AttachDocumentAsync(id, documentId, userId);
+            return Ok(result);
         }
 
         [HttpDelete("{id}/document/{documentId}")]
         [Authorize]
-
         public async Task<ActionResult<TransactionDTO>> DetachDocument(int id, int documentId)
         {
-            var existing = await _context.TransactionDocuments
-                .FirstOrDefaultAsync(td => td.TransactionId == id && td.DocumentId == documentId);
-
-            if (existing != null)
-            {
-                _context.TransactionDocuments.Remove(existing);
-                await _context.SaveChangesAsync();
-            }
-
-            return (await FindOne(id)).Result;
-        }
-
-        private async Task<TransactionDTO> MapToDTO(Transaction t)
-        {
-             return MapToDTOManual(t);
-        }
-
-        private TransactionDTO MapToDTOManual(Transaction t)
-        {
-            return new TransactionDTO
-            {
-                Id = t.Id,
-                Title = t.Title,
-                Description = t.Description,
-                Fulfilled = t.Fulfilled,
-                Priority = t.Priority,
-                CreatedAt = t.CreatedAt,
-                CreatorId = t.CreatorId,
-                TransactionTypeName = t.TransactionTypeName,
-                LastForwardStatus = t.Forwards?.OrderByDescending(f => f.Id).FirstOrDefault()?.Status,
-                Documents = t.Documents?.Select(d => new DocumentResponseDTO
-                {
-                    Id = d.Id,
-                    Title = d.Title,
-                    URI = $"/api/v1/Document/{d.Id}/download",
-                    UploadedAt = d.UploadedAt,
-                    UploaderId = d.UploaderId
-                }).ToList()
-            };
+            var result = await _transactionService.DetachDocumentAsync(id, documentId);
+            return Ok(result);
         }
     }
 }

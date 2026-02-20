@@ -1,119 +1,80 @@
-using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.DTOs;
-using FinanceSystem_Dotnet.Models;
+using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/[controller]")]
+    [Route("api/v1/documents")]
     [ApiController]
     [Authorize]
     public class DocumentController : ControllerBase
     {
-        private readonly FinanceDbContext _context;
+        private readonly IDocumentService _documentService;
 
-        public DocumentController(FinanceDbContext context)
+        public DocumentController(IDocumentService documentService)
         {
-            _context = context;
+            _documentService = documentService;
         }
 
         [HttpPost]
         [Authorize]
         public async Task<ActionResult<DocumentResponseDTO>> Create(IFormFile file)
         {
-            if (file == null || file.Length == 0)
-                return BadRequest("File is required");
-
-            if (file.ContentType != "application/pdf")
-                return BadRequest("Only PDF files are allowed");
-
-            if (file.Length > 1024 * 1024 * 5)
-                return BadRequest("File size cannot exceed 5MB");
+            var validationError = await _documentService.ValidateFile(file);
+            if (validationError != null)
+                return BadRequest(validationError);
 
             var uploaderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var result = await _documentService.CreateDocumentAsync(file, uploaderId);
 
-            using var memoryStream = new MemoryStream();
-            await file.CopyToAsync(memoryStream);
+            if (result == null) return BadRequest();
 
-            var document = new Document
-            {
-                Title = file.FileName,
-                Content = memoryStream.ToArray(),
-                UploadedAt = DateTime.UtcNow,
-                UploaderId = uploaderId
-            };
-
-            _context.Documents.Add(document);
-            await _context.SaveChangesAsync();
-
-            return CreatedAtAction(nameof(FindOne), new { id = document.Id }, MapToResponse(document));
+            return CreatedAtAction(nameof(FindOne), new { id = result.Value.Id }, result.Value.Document);
         }
 
         [HttpGet("uploaded")]
         [Authorize]
-        public async Task<ActionResult<IEnumerable<DocumentResponseDTO>>> FindAll()
+        public async Task<ActionResult> FindAll([FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
             var uploaderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-            var documents = await _context.Documents
-                .Where(d => d.UploaderId == uploaderId)
-                .ToListAsync();
-
-            return Ok(documents.Select(MapToResponse));
+            var documents = await _documentService.GetDocumentsByUploaderAsync(uploaderId);
+            var paginated = PaginatedResult<DocumentResponseDTO>.Create(documents, page, perPage);
+            return Ok(paginated);
         }
 
         [HttpGet("{id}")]
         [Authorize]
-
         public async Task<ActionResult<DocumentResponseDTO>> FindOne(int id)
         {
-            var document = await _context.Documents.FindAsync(id);
+            var document = await _documentService.GetDocumentByIdAsync(id);
             if (document == null)
                 return NotFound();
 
-            return Ok(MapToResponse(document));
+            return Ok(document);
         }
 
         [HttpGet("{id}/download")]
         [Authorize]
-
         public async Task<IActionResult> Download(int id)
         {
-            var document = await _context.Documents.FindAsync(id);
-            if (document == null)
+            var result = await _documentService.DownloadDocumentAsync(id);
+            if (result == null)
                 return NotFound();
 
-            return File(document.Content, "application/pdf", document.Title);
+            return File(result.Value.Content, "application/pdf", result.Value.Title);
         }
 
         [HttpDelete("{id}")]
         [Authorize]
-
         public async Task<IActionResult> Remove(int id)
         {
-            var document = await _context.Documents.FindAsync(id);
+            var document = await _documentService.DeleteDocumentAsync(id);
             if (document == null)
                 return NotFound();
 
-            _context.Documents.Remove(document);
-            await _context.SaveChangesAsync();
-
-            return Ok(MapToResponse(document));
-        }
-
-        private DocumentResponseDTO MapToResponse(Document document)
-        {
-            return new DocumentResponseDTO
-            {
-                Id = document.Id,
-                Title = document.Title,
-                URI = $"/api/v1/Document/{document.Id}/download",
-                UploadedAt = document.UploadedAt,
-                UploaderId = document.UploaderId
-            };
+            return Ok(document);
         }
     }
 }

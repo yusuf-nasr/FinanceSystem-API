@@ -1,10 +1,7 @@
-using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.DTOs;
-using FinanceSystem_Dotnet.Enums;
-using FinanceSystem_Dotnet.Models;
+using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
@@ -14,160 +11,67 @@ namespace FinanceSystem_Dotnet.Controllers
     [Authorize]
     public class TransactionForwardController : ControllerBase
     {
-        private readonly FinanceDbContext _context;
+        private readonly ITransactionForwardService _forwardService;
 
-        public TransactionForwardController(FinanceDbContext context)
+        public TransactionForwardController(ITransactionForwardService forwardService)
         {
-            _context = context;
+            _forwardService = forwardService;
         }
 
         [HttpPost]
         public async Task<ActionResult<TransactionForwardDTO>> Create(int transactionId, TransactionForwardCreateDTO dto)
         {
             var senderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-
-            var forward = new TransactionForward
-            {
-                TransactionId = transactionId,
-                SenderId = senderId,
-                ReceiverId = dto.ReceiverId,
-                SenderComment = dto.Comment,
-                Status = TransactionForwardStatus.WAITING,
-                ForwardedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-                SenderSeen = true,
-                ReceiverSeen = false
-            };
-
-            _context.TransactionForwards.Add(forward);
-            await _context.SaveChangesAsync();
-
-            // Refetch to include navigation properties
-            forward = await _context.TransactionForwards
-                .Include(f => f.Sender)
-                .Include(f => f.Receiver)
-                .FirstOrDefaultAsync(f => f.Id == forward.Id);
-
-            return CreatedAtAction(nameof(FindOne), new { transactionId, id = forward.Id }, MapToDTO(forward));
+            var result = await _forwardService.CreateAsync(transactionId, dto, senderId);
+            return CreatedAtAction(nameof(FindOne), new { transactionId, id = result.Id }, result);
         }
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<TransactionForwardDTO>>> FindAll(int transactionId)
+        public async Task<ActionResult> FindAll(int transactionId, [FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
-            var forwards = await _context.TransactionForwards
-                .Include(f => f.Sender)
-                .Include(f => f.Receiver)
-                .Where(f => f.TransactionId == transactionId)
-                .ToListAsync();
-
-            return Ok(forwards.Select(MapToDTO));
+            var result = await _forwardService.FindAllAsync(transactionId);
+            var paginated = PaginatedResult<TransactionForwardDTO>.Create(result, page, perPage);
+            return Ok(paginated);
         }
 
         [HttpGet("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> FindOne(int transactionId, int id)
         {
-            var forward = await _context.TransactionForwards
-                .Include(f => f.Sender)
-                .Include(f => f.Receiver)
-                .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
-
-            if (forward == null)
-                return NotFound();
-
-            return Ok(MapToDTO(forward));
+            var result = await _forwardService.FindOneAsync(transactionId, id);
+            if (result == null) return NotFound();
+            return Ok(result);
         }
 
         [HttpPatch("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> UpdateSender(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
         {
-            var forward = await _context.TransactionForwards
-                .Include(f => f.Sender)
-                .Include(f => f.Receiver)
-                .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
-
-            if (forward == null)
-                return NotFound();
-
-            forward.SenderComment = dto.Comment;
-            forward.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(MapToDTO(forward));
+            var result = await _forwardService.UpdateSenderAsync(transactionId, id, dto);
+            if (result == null) return NotFound();
+            return Ok(result);
         }
 
         [HttpPost("{id}/response")]
         public async Task<ActionResult<TransactionForwardDTO>> Respond(int transactionId, int id, TransactionForwardUpdateDTO dto)
         {
-            var forward = await _context.TransactionForwards
-                .Include(f => f.Sender)
-                .Include(f => f.Receiver)
-                .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
-
-            if (forward == null)
-                return NotFound();
-
-            forward.Status = dto.Status;
-            forward.ReceiverComment = dto.Comment;
-            forward.ReceiverSeen = true;
-            forward.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(MapToDTO(forward));
+            var result = await _forwardService.RespondAsync(transactionId, id, dto);
+            if (result == null) return NotFound();
+            return Ok(result);
         }
 
         [HttpPatch("{id}/response")]
         public async Task<ActionResult<TransactionForwardDTO>> UpdateResponse(int transactionId, int id, TransactionForwardUpdateDTO dto)
         {
-            var forward = await _context.TransactionForwards
-                .Include(f => f.Sender)
-                .Include(f => f.Receiver)
-                .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
-
-            if (forward == null)
-                return NotFound();
-
-            forward.Status = dto.Status;
-            forward.ReceiverComment = dto.Comment;
-            forward.ReceiverSeen = true;
-            forward.UpdatedAt = DateTime.UtcNow;
-
-            await _context.SaveChangesAsync();
-            return Ok(MapToDTO(forward));
+            var result = await _forwardService.UpdateResponseAsync(transactionId, id, dto);
+            if (result == null) return NotFound();
+            return Ok(result);
         }
 
         [HttpDelete("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> Remove(int transactionId, int id)
         {
-            var forward = await _context.TransactionForwards
-                .Include(f => f.Sender)
-                .Include(f => f.Receiver)
-                .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
-
-            if (forward == null)
-                return NotFound();
-
-            _context.TransactionForwards.Remove(forward);
-            await _context.SaveChangesAsync();
-
-            return Ok(MapToDTO(forward));
-        }
-
-        private TransactionForwardDTO MapToDTO(TransactionForward f)
-        {
-            return new TransactionForwardDTO
-            {
-                Id = f.Id,
-                Status = f.Status,
-                SenderComment = f.SenderComment,
-                ReceiverComment = f.ReceiverComment,
-                SenderSeen = f.SenderSeen,
-                ReceiverSeen = f.ReceiverSeen,
-                ForwardedAt = f.ForwardedAt,
-                UpdatedAt = f.UpdatedAt,
-                TransactionId = f.TransactionId,
-                Sender = new UserResponseDTO(f.Sender),
-                Receiver = new UserResponseDTO(f.Receiver)
-            };
+            var result = await _forwardService.DeleteAsync(transactionId, id);
+            if (result == null) return NotFound();
+            return Ok(result);
         }
     }
 }

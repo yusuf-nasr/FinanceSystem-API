@@ -1,11 +1,7 @@
-﻿using FinanceSystem_Dotnet.DAL;
-using FinanceSystem_Dotnet.DTOs;
-using FinanceSystem_Dotnet.Models;
+﻿using FinanceSystem_Dotnet.DTOs;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
@@ -14,57 +10,47 @@ namespace FinanceSystem_Dotnet.Controllers
     [ApiController]
     public class TransactionTypeController : ControllerBase
     {
-        private readonly FinanceDbContext _context;
-        private readonly IFinanceService services;
+        private readonly ITransactionTypeService _transactionTypeService;
+        private readonly IFinanceService _financeService;
 
-        public TransactionTypeController(FinanceDbContext context, IFinanceService services)
+        public TransactionTypeController(ITransactionTypeService transactionTypeService, IFinanceService financeService)
         {
-            _context = context;
-            this.services = services;
+            _transactionTypeService = transactionTypeService;
+            _financeService = financeService;
         }
+
         [HttpPost]
         [Authorize]
         public async Task<IActionResult> CreateTransactionType(TransactionTypeCreateDTO request)
         {
-            if (_context.TransactionTypes.FirstOrDefault(t => t.Name == request.Name) != null)
+            var creatorId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+            var result = await _transactionTypeService.CreateAsync(request, creatorId);
+            if (!result.Success)
             {
-                return BadRequest("Transaction type already exists.");
+                return BadRequest(result.Message);
             }
-            var transactionType = new TransactionType
-            {
-                Name = request.Name,
-                CreatorId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0")
-            };
-            _context.TransactionTypes.Add(transactionType);
-            await _context.SaveChangesAsync();
-            return Ok("Transaction type created successfully.");
+            return Ok(result.Message);
         }
 
         [HttpGet]
         [Authorize]
-        public async Task<IActionResult> GetTransactionTypes()
+        public async Task<IActionResult> GetTransactionTypes([FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
-            return Ok(await _context.TransactionTypes.Select(t => new TransactionTypeResponseDTO
-            {
-                CreatorId = t.CreatorId,
-                Name = t.Name
-            }).ToListAsync());
+            var result = await _transactionTypeService.GetAllAsync();
+            var paginated = PaginatedResult<TransactionTypeResponseDTO>.Create(result, page, perPage);
+            return Ok(paginated);
         }
 
         [HttpGet("{name}")]
         [Authorize]
         public async Task<IActionResult> GetTransactionTypeByName(string name)
         {
-            var transactionType = await _context.TransactionTypes.FirstOrDefaultAsync(t => t.Name == name);
-            if (transactionType == null)
+            var result = await _transactionTypeService.GetByNameAsync(name);
+            if (result == null)
             {
                 return NotFound("Transaction type not found.");
             }
-            return Ok(new TransactionTypeResponseDTO
-            {
-                CreatorId = transactionType.CreatorId,
-                Name = transactionType.Name
-            });
+            return Ok(result);
         }
 
         [HttpDelete("{name}")]
@@ -72,19 +58,25 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<IActionResult> DeleteTransactionType(string name)
         {
             int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            
-            var transactionType = await _context.TransactionTypes.FirstOrDefaultAsync(t => t.Name == name);
-            if (!(services.IsAdmin(UID) || transactionType.CreatorId == UID))
-            {
-                return Forbid("Only admins or creator can delete transaction types.");
-            }
+
+            // Check permission before deleting — need to look up the type first
+            var transactionType = await _transactionTypeService.GetByNameAsync(name);
             if (transactionType == null)
             {
                 return NotFound("Transaction type not found.");
             }
-            _context.TransactionTypes.Remove(transactionType);
-            await _context.SaveChangesAsync();
-            return Ok("Transaction type deleted successfully.");
+
+            if (!(_financeService.IsAdmin(UID) || transactionType.CreatorId == UID))
+            {
+                return Forbid("Only admins or creator can delete transaction types.");
+            }
+
+            var result = await _transactionTypeService.DeleteAsync(name);
+            if (!result.Success)
+            {
+                return NotFound(result.Message);
+            }
+            return Ok(result.Message);
         }
     }
 }

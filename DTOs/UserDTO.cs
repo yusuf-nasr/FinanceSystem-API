@@ -16,7 +16,7 @@ namespace FinanceSystem_Dotnet.DTOs
     }
     public class UserLoginDTO
     {
-        public string Username { get; set; }
+        public string Name { get; set; }
         public string Password { get; set; }
 
     }
@@ -28,7 +28,7 @@ namespace FinanceSystem_Dotnet.DTOs
             Name = user.Name;
             role = user.Role;
             CreatedAt = user.CreatedAt.ToLocalTime();
-            LastLogin = user.LastLogin.Value.ToLocalTime();
+            LastLogin = user.LastLogin?.ToLocalTime();
             Active = user.Active;
             DepartmentName = user.DepartmentName;
 
