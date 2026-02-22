@@ -13,5 +13,7 @@ namespace FinanceSystem_Dotnet.Services
         Task<TransactionForwardDTO?> UpdateResponseAsync(int transactionId, int id, TransactionForwardUpdateDTO dto, int receiverId);
         Task<TransactionForwardDTO?> DeleteAsync(int transactionId, int id, int senderId);
         Task MarkAsSeenAsync(int transactionId, int forwardId, int userId);
+        Task<TransactionForwardDTO?> EditSenderCommentAsync(int transactionId, int id, string? comment, int senderId);
+        Task<TransactionForwardDTO?> EditReceiverCommentAsync(int transactionId, int id, string? comment, int receiverId);
     }
 }

@@ -149,6 +149,7 @@ namespace FinanceSystem_Dotnet.Services
             forward.Status = dto.Status;
             forward.ReceiverComment = dto.Comment;
             forward.ReceiverSeen = true;
+            forward.SenderSeen = false;
             forward.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -182,6 +183,7 @@ namespace FinanceSystem_Dotnet.Services
             forward.Status = dto.Status;
             forward.ReceiverComment = dto.Comment;
             forward.ReceiverSeen = true;
+            forward.SenderSeen = false;
             forward.UpdatedAt = DateTime.UtcNow;
 
             await _context.SaveChangesAsync();
@@ -208,6 +210,49 @@ namespace FinanceSystem_Dotnet.Services
             _context.TransactionForwards.Remove(forward);
             await _context.SaveChangesAsync();
 
+            return MapToDTO(forward);
+        }
+
+        public async Task<TransactionForwardDTO?> EditSenderCommentAsync(int transactionId, int id, string? comment, int senderId)
+        {
+            var forward = await _context.TransactionForwards
+                .Include(f => f.Sender)
+                .Include(f => f.Receiver)
+                .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
+
+            if (forward == null) return null;
+
+            if (forward.SenderId != senderId)
+                throw new ApiException(403, ErrorCode.NOT_FORWARD_SENDER);
+
+            await ValidateIsLatestForward(transactionId, id);
+
+            forward.SenderComment = comment;
+            forward.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
+            return MapToDTO(forward);
+        }
+
+        public async Task<TransactionForwardDTO?> EditReceiverCommentAsync(int transactionId, int id, string? comment, int receiverId)
+        {
+            var forward = await _context.TransactionForwards
+                .Include(f => f.Sender)
+                .Include(f => f.Receiver)
+                .FirstOrDefaultAsync(f => f.Id == id && f.TransactionId == transactionId);
+
+            if (forward == null) return null;
+
+            if (forward.ReceiverId != receiverId)
+                throw new ApiException(403, ErrorCode.NOT_FORWARD_RECEIVER);
+
+            await ValidateIsLatestForward(transactionId, id);
+
+            forward.ReceiverComment = comment;
+            forward.SenderSeen = false;
+            forward.UpdatedAt = DateTime.UtcNow;
+
+            await _context.SaveChangesAsync();
             return MapToDTO(forward);
         }
 

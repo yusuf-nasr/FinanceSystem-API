@@ -73,6 +73,24 @@ namespace FinanceSystem_Dotnet.Controllers
             return Ok(result);
         }
 
+        [HttpPatch("{id}/sender-comment")]
+        public async Task<ActionResult<TransactionForwardDTO>> EditSenderComment(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
+        {
+            var senderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var result = await _forwardService.EditSenderCommentAsync(transactionId, id, dto.Comment, senderId);
+            if (result == null) return NotFound();
+            return Ok(result);
+        }
+
+        [HttpPatch("{id}/receiver-comment")]
+        public async Task<ActionResult<TransactionForwardDTO>> EditReceiverComment(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
+        {
+            var receiverId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var result = await _forwardService.EditReceiverCommentAsync(transactionId, id, dto.Comment, receiverId);
+            if (result == null) return NotFound();
+            return Ok(result);
+        }
+
         [HttpDelete("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> Remove(int transactionId, int id)
         {
