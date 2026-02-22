@@ -64,14 +64,18 @@ namespace FinanceSystem_Dotnet.Services
             else if (query == TransactionQuery.Inbox)
             {
                 transactionsQuery = transactionsQuery.Where(t =>
-                    (t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault() != null && t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault().ReceiverId == userId) ||
+                    (t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault() != null
+                        && t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault().ReceiverId == userId
+                        && !t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault().SenderSeen) ||
                     (!t.Forwards.Any() && t.CreatorId == userId)
                 );
             }
             else if (query == TransactionQuery.Outgoing)
             {
                 transactionsQuery = transactionsQuery.Where(t =>
-                    t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault() != null && t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault().SenderId == userId
+                    t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault() != null
+                    && t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault().SenderId == userId
+                    && t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault().SenderSeen
                 );
             }
             else // Archive or default
@@ -108,7 +112,7 @@ namespace FinanceSystem_Dotnet.Services
 
             return new TransactionListResultDTO
             {
-                Data = items.Select(MapToDTO).ToList(),
+                Data = items.Select(MapToListItemDTO).ToList(),
                 Pagination = new PaginationMeta
                 {
                     Total = totalCount,
@@ -149,6 +153,16 @@ namespace FinanceSystem_Dotnet.Services
             return false;
         }
 
+        public async Task<bool> IsLastReceiver(int transactionId, int userId)
+        {
+            var latestForward = await _context.TransactionForwards
+                .Where(f => f.TransactionId == transactionId)
+                .OrderByDescending(f => f.Id)
+                .FirstOrDefaultAsync();
+
+            return latestForward != null && latestForward.ReceiverId == userId;
+        }
+
         public async Task MarkAsSeenAsync(int transactionId, int userId)
         {
             var transaction = await _context.Transactions
@@ -163,13 +177,30 @@ namespace FinanceSystem_Dotnet.Services
             if (latestForward.SenderId == userId && !latestForward.SenderSeen)
             {
                 latestForward.SenderSeen = true;
-                latestForward.UpdatedAt = DateTime.UtcNow;
                 await _context.SaveChangesAsync();
             }
             else if (latestForward.ReceiverId == userId && !latestForward.ReceiverSeen)
             {
                 latestForward.ReceiverSeen = true;
-                latestForward.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task ResetSenderSeenAsync(int transactionId, int receiverUserId)
+        {
+            var transaction = await _context.Transactions
+                .Include(t => t.Forwards)
+                .FirstOrDefaultAsync(t => t.Id == transactionId);
+
+            if (transaction == null) return;
+
+            var latestForward = transaction.Forwards?.OrderByDescending(f => f.Id).FirstOrDefault();
+            if (latestForward == null) return;
+
+            // Only reset if the current user is the receiver of the latest forward
+            if (latestForward.ReceiverId == receiverUserId && latestForward.SenderSeen)
+            {
+                latestForward.SenderSeen = false;
                 await _context.SaveChangesAsync();
             }
         }
@@ -275,6 +306,9 @@ namespace FinanceSystem_Dotnet.Services
                 await _context.SaveChangesAsync();
             }
 
+            // Reset sender seen since receiver modified the transaction
+            await ResetSenderSeenAsync(transactionId, userId);
+
             return await FindOneAsync(transactionId);
         }
 
@@ -283,15 +317,31 @@ namespace FinanceSystem_Dotnet.Services
             var existing = await _context.TransactionDocuments
                 .FirstOrDefaultAsync(td => td.TransactionId == transactionId && td.DocumentId == documentId);
 
-            if (existing != null)
-            {
-                // Only the person who attached can detach
-                if (existing.AttachedBy != userId)
-                    throw new ApiException(403, ErrorCode.NOT_DOCUMENT_ATTACHER);
+            if (existing == null)
+                return await FindOneAsync(transactionId);
 
-                _context.TransactionDocuments.Remove(existing);
-                await _context.SaveChangesAsync();
-            }
+            // Only the person who attached can detach
+            if (existing.AttachedBy != userId)
+                throw new ApiException(403, ErrorCode.NOT_DOCUMENT_ATTACHER);
+
+            // Document must have been attached during the latest forward
+            var latestForward = await _context.TransactionForwards
+                .Where(f => f.TransactionId == transactionId)
+                .OrderByDescending(f => f.Id)
+                .FirstOrDefaultAsync();
+
+            if (latestForward == null || existing.AttachedAt < latestForward.ForwardedAt)
+                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
+
+            // User must be sender or receiver of the latest forward
+            if (latestForward.SenderId != userId && latestForward.ReceiverId != userId)
+                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
+
+            _context.TransactionDocuments.Remove(existing);
+            await _context.SaveChangesAsync();
+
+            // Reset sender seen since the transaction was modified
+            await ResetSenderSeenAsync(transactionId, userId);
 
             return await FindOneAsync(transactionId);
         }
@@ -317,6 +367,20 @@ namespace FinanceSystem_Dotnet.Services
                     UploadedAt = d.UploadedAt,
                     UploaderId = d.UploaderId
                 }).ToList()
+            };
+        }
+
+        private TransactionListItemDTO MapToListItemDTO(Transaction t)
+        {
+            return new TransactionListItemDTO
+            {
+                Id = t.Id,
+                Title = t.Title,
+                Fulfilled = t.Fulfilled,
+                Priority = t.Priority,
+                TransactionTypeName = t.TransactionTypeName,
+                LastForwardStatus = t.Forwards?.OrderByDescending(f => f.Id).FirstOrDefault()?.Status,
+                DocumentsCount = t.Documents?.Count ?? 0
             };
         }
     }

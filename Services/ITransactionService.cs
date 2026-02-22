@@ -13,7 +13,9 @@ namespace FinanceSystem_Dotnet.Services
         Task<TransactionDTO?> AttachDocumentAsync(int transactionId, int documentId, int userId);
         Task<TransactionDTO?> DetachDocumentAsync(int transactionId, int documentId, int userId);
         Task<bool> IsParticipant(int transactionId, int userId);
+        Task<bool> IsLastReceiver(int transactionId, int userId);
         Task MarkAsSeenAsync(int transactionId, int userId);
+        Task ResetSenderSeenAsync(int transactionId, int receiverUserId);
         Task<bool> IsAttacher(int transactionId, int documentId, int userId);
         Task CheckRestriction(int transactionId, int userId);
     }

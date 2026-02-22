@@ -111,9 +111,9 @@ namespace FinanceSystem_Dotnet.Controllers
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
 
-            // Check participant permission
-            if (!await _transactionService.IsParticipant(id, userId))
-                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
+            // Only the last receiver can attach documents
+            if (!await _transactionService.IsLastReceiver(id, userId))
+                throw new ApiException(403, ErrorCode.NOT_LATEST_RECEIVER);
 
             // Check forward restriction (can't edit if forward already seen/responded)
             await _transactionService.CheckRestriction(id, userId);
@@ -127,13 +127,6 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<ActionResult<TransactionDTO>> DetachDocument(int id, int documentId)
         {
             var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-
-            // Check participant permission
-            if (!await _transactionService.IsParticipant(id, userId))
-                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
-
-            // Check forward restriction
-            await _transactionService.CheckRestriction(id, userId);
 
             var result = await _transactionService.DetachDocumentAsync(id, documentId, userId);
             return Ok(result);

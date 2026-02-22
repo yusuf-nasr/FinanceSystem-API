@@ -16,9 +16,20 @@ namespace FinanceSystem_Dotnet.DTOs
         public virtual ICollection<DocumentResponseDTO> Documents { get; set; }
     }
 
+    public class TransactionListItemDTO
+    {
+        public int Id { get; set; }
+        public string Title { get; set; }
+        public bool Fulfilled { get; set; }
+        public TransactionPriority Priority { get; set; }
+        public TransactionForwardStatus? LastForwardStatus { get; set; }
+        public string TransactionTypeName { get; set; }
+        public int DocumentsCount { get; set; }
+    }
+
     public class TransactionListResultDTO
     {
-        public List<TransactionDTO> Data { get; set; } = new();
+        public List<TransactionListItemDTO> Data { get; set; } = new();
         public PaginationMeta Pagination { get; set; } = new();
         public Dictionary<string, int> Summary { get; set; } = new();
     }
