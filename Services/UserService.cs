@@ -110,5 +110,23 @@ namespace FinanceSystem_Dotnet.Services
             await _context.SaveChangesAsync();
             return (true, $"User {user.Name} deleted successfully");
         }
+
+        public async Task<PaginatedResult<UserResponseDTO>> SearchUsersByNameAsync(string name, int page, int perPage)
+        {
+            var query = _context.Users
+                .Where(u => u.Name.ToLower().Contains(name.ToLower()))
+                .Select(u => new UserResponseDTO
+                {
+                    Id = u.Id,
+                    Name = u.Name,
+                    role = u.Role,
+                    CreatedAt = u.CreatedAt,
+                    LastLogin = u.LastLogin,
+                    Active = u.Active,
+                    DepartmentName = u.DepartmentName
+                });
+
+            return await PaginatedResult<UserResponseDTO>.CreateAsync(query, page, perPage);
+        }
     }
 }

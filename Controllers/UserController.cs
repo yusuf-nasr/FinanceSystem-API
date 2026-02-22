@@ -47,6 +47,17 @@ namespace FinanceSystem_Dotnet.Controllers
             return Ok(paginated);
         }
 
+        [HttpGet("search")]
+        [Authorize]
+        public async Task<ActionResult> SearchUsers([FromQuery] string name, [FromQuery] int page = 1, [FromQuery] int perPage = 10)
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return BadRequest(new { message = "Name query parameter is required" });
+
+            var result = await _userService.SearchUsersByNameAsync(name, page, perPage);
+            return Ok(result);
+        }
+
         [HttpGet("{id}")]
         [Authorize]
         public async Task<ActionResult> GetUserById(int id)

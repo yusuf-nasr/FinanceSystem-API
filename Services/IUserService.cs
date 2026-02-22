@@ -10,5 +10,6 @@ namespace FinanceSystem_Dotnet.Services
         Task<UserResponseDTO?> GetUserByIdAsync(int id);
         Task<(bool Success, string Message)> UpdateUserAsync(int id, UserUpdateDTO request, bool isAdmin);
         Task<(bool Success, string Message)> DeleteUserAsync(int id);
+        Task<PaginatedResult<UserResponseDTO>> SearchUsersByNameAsync(string name, int page, int perPage);
     }
 }
