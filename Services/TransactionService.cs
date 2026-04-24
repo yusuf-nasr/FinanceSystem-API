@@ -290,8 +290,17 @@ namespace FinanceSystem_Dotnet.Services
 
             if (transaction == null) return null;
 
-            _context.Transactions.Remove(transaction);
-            await _context.SaveChangesAsync();
+            try
+            {
+                _context.Transactions.Remove(transaction);
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                // FK violation: transaction still has forwards — cannot delete
+                throw new ApiException(409, ErrorCode.TRANSACTION_HAS_FORWARDS,
+                    new Dictionary<string, object> { { "id", id } });
+            }
 
             return MapToDTO(transaction);
         }

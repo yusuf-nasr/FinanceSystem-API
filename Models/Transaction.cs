@@ -19,6 +19,10 @@ namespace FinanceSystem_Dotnet.Models
         public string TransactionTypeName { get; set; }
         public virtual TransactionType TransactionType { get; set; }
 
+        public string? BudgetName { get; set; }
+        public double? BudgetAllocation { get; set; }
+        public virtual BudgetCategory? BudgetCategory { get; set; }
+
         public virtual ICollection<Document> Documents { get; set; }
         public virtual ICollection<TransactionForward> Forwards { get; set; }
     }
