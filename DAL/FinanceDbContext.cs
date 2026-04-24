@@ -16,6 +16,8 @@ namespace FinanceSystem_Dotnet.DAL
         public DbSet<Document> Documents { get; set; }
         public DbSet<TransactionForward> TransactionForwards { get; set; }
         public DbSet<TransactionDocument> TransactionDocuments { get; set; }// for explicit join entity
+        public DbSet<BudgetCategory> BudgetCategories { get; set; }
+        public DbSet<BudgetEntry> BudgetEntries { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -57,6 +59,12 @@ namespace FinanceSystem_Dotnet.DAL
                 entity.HasOne(e => e.TransactionType)
                     .WithMany(tt => tt.Transactions)
                     .HasForeignKey(e => e.TransactionTypeName)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.BudgetCategory)
+                    .WithMany(bc => bc.Transactions)
+                    .HasForeignKey(e => e.BudgetName)
+                    .IsRequired(false)
                     .OnDelete(DeleteBehavior.Restrict);
 
                 // Use the CLR join entity so the "AttachedBy" and "AttachedAt" are first-class properties
@@ -127,6 +135,26 @@ namespace FinanceSystem_Dotnet.DAL
                 entity.HasOne(e => e.Transaction)
                     .WithMany(t => t.Forwards)
                     .HasForeignKey(e => e.TransactionId)
+                    .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<BudgetCategory>(entity =>
+            {
+                entity.HasKey(e => e.Name);
+            });
+
+            modelBuilder.Entity<BudgetEntry>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+
+                entity.HasOne(e => e.Budget)
+                    .WithMany(bc => bc.Entries)
+                    .HasForeignKey(e => e.BudgetName)
+                    .OnDelete(DeleteBehavior.Restrict);
+
+                entity.HasOne(e => e.Inputter)
+                    .WithMany()
+                    .HasForeignKey(e => e.InputterId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
         }

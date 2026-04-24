@@ -1,143 +1,120 @@
-﻿using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.DTOs;
 using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
-using Microsoft.AspNetCore.Http;
-using Microsoft.AspNetCore.Identity.Data;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using System.Security.Claims;
-using System.Threading.Tasks;
-//int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/[controller]")]
+    [Route("api/v1/users")]
     [ApiController]
+    [Authorize]
     public class UserController : ControllerBase
     {
-        private readonly FinanceDbContext context;
-        private readonly IFinanceService services;
+        private readonly IUserService _userService;
 
-        public UserController(FinanceDbContext _context, IFinanceService services)
+        public UserController(IUserService userService)
         {
-            context = _context;
-            this.services = services;
-        }
-        [Authorize]
-        [HttpPost("create")]
-        public async Task<ActionResult> CreateUser([FromBody] UserCreateDTO request)
-        {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!services.IsAdmin(UID))
-            {
-                return Forbid();
-            }
-            if (context.Users.Any(u => u.Name == request.Name))
-            {
-                return BadRequest(new { message = "Username already exists" });
-            }
-            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
-            context.Users.Add(new Models.User
-            {
-                Name = request.Name,
-                HashedPassword = hashedPassword,
-                CreatedAt = DateTime.UtcNow,
-                Active = true,
-                Role = request.role,
-                DepartmentName = request.DepartmentName
-            });
-            await context.SaveChangesAsync();
-            return Ok(new { message = $"User {request.Name} created successfully" });
+            _userService = userService;
         }
 
+        private int GetCurrentUserId() =>
+            int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+
+        private Role GetCurrentUserRole()
+        {
+            var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+            return Enum.TryParse<Role>(roleStr, out var role) ? role : Role.USER;
+        }
+
+        // POST /api/v1/users — Admin only
+        [HttpPost]
+        public async Task<ActionResult<UserResponseDTO>> CreateUser([FromBody] UserCreateDTO request)
+        {
+            if (GetCurrentUserRole() != Role.ADMIN)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+
+            var result = await _userService.CreateUserAsync(request);
+            return StatusCode(201, result);
+        }
+
+        // GET /api/v1/users
         [HttpGet]
-        [Authorize]
-        public async Task<ActionResult> GetUsers()
+        public async Task<ActionResult<PaginatedResult<UserResponseDTO>>> GetUsers([FromQuery] UserQueryDTO query)
         {
-            //int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            //if (!services.IsAdmin(UID))
-            //{
-            //    return Forbid();
-            //}
-            var users = await context.Users.Select(u => new UserResponseDTO(u)).ToListAsync();
-            return Ok(users);
+            var role = GetCurrentUserRole();
+
+            // Non-admins cannot filter by active status
+            if (role != Role.ADMIN && query.Active.HasValue)
+                throw new ApiException(403, ErrorCode.RESTRICTED_FIELD_UPDATE,
+                    new Dictionary<string, object> { { "fields", "active" } });
+
+            var result = await _userService.FindAllAsync(query);
+            return Ok(result);
         }
 
+        // GET /api/v1/users/me
+        [HttpGet("me")]
+        public async Task<ActionResult<UserResponseDTO>> GetMe()
+        {
+            var userId = GetCurrentUserId();
+            var user = await _userService.GetUserByIdAsync(userId);
+            if (user == null)
+                throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", userId } });
+            return Ok(user);
+        }
+
+        // GET /api/v1/users/:id
         [HttpGet("{id}")]
-        [Authorize]
-        public async Task<ActionResult> GetUserById(int id)
+        public async Task<ActionResult<UserResponseDTO>> GetUserById(int id)
         {
-            //int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            //if (!services.IsAdmin(UID) || UID != id)
-            //{
-            //    return Forbid();
-            //}
-            var user = await context.Users.FindAsync(id);
+            var user = await _userService.GetUserByIdAsync(id);
             if (user == null)
-            {
-                return NotFound(new { message = "User not found" });
-            }
-            return Ok(new UserResponseDTO(user));
+                throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id } });
+            return Ok(user);
         }
 
+        // PATCH /api/v1/users/:id
         [HttpPatch("{id}")]
-        [Authorize]
-        public async Task<ActionResult> UpdateUser(int id, [FromBody] UserUpdateDTO request)
+        public async Task<ActionResult<UserResponseDTO>> UpdateUser(int id, [FromBody] UserUpdateDTO request)
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            var isAdmin = services.IsAdmin(UID);
-            if (!isAdmin && UID != id)
+            var uid = GetCurrentUserId();
+            var isAdmin = GetCurrentUserRole() == Role.ADMIN;
+
+            // Only admin can update other users; a user can only update themselves
+            if (!isAdmin && uid != id)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+
+            // Non-admins can only update 'name' and 'password'
+            if (!isAdmin)
             {
-                return Forbid();
+                var forbiddenFields = new List<string>();
+                if (request.role.HasValue) forbiddenFields.Add("role");
+                if (request.Active.HasValue) forbiddenFields.Add("active");
+                if (request.DepartmentName != null) forbiddenFields.Add("departmentName");
+
+                if (forbiddenFields.Count > 0)
+                    throw new ApiException(403, ErrorCode.RESTRICTED_FIELD_UPDATE,
+                        new Dictionary<string, object> { { "fields", string.Join(", ", forbiddenFields) } });
             }
-            var user = await context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound(new { message = "User not found" });
-            }
-            if (!string.IsNullOrEmpty(request.Name))
-            {
-                user.Name = request.Name;
-            }
-            if (!string.IsNullOrEmpty(request.Password))
-            {
-                user.HashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
-            }
-            if (request.Active.ToString() != "" && isAdmin)
-            {
-                user.Active = request.Active;
-            }
-            if (request.role.ToString() != "" && isAdmin)
-            {
-                user.Role = request.role;
-            }
-            if (!string.IsNullOrEmpty(request.DepartmentName) && isAdmin)
-            {
-                user.DepartmentName = request.DepartmentName;
-            }
-            await context.SaveChangesAsync();
-            return Ok(new { message = $"User {user.Name} updated successfully" });
-        }
-        [HttpDelete("{id}")]
-        [Authorize]
-        public async Task<ActionResult> DeleteUser(int id)
-        {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!services.IsAdmin(UID))
-            {
-                return Forbid();
-            }
-            var user = await context.Users.FindAsync(id);
-            if (user == null)
-            {
-                return NotFound(new { message = "User not found" });
-            }
-            context.Users.Remove(user);
-            await context.SaveChangesAsync();
-            return Ok(new { message = $"User {user.Name} deleted successfully" });
+
+            var result = await _userService.UpdateUserAsync(id, request);
+            return Ok(result);
         }
 
+        // DELETE /api/v1/users/:id — Admin only
+        [HttpDelete("{id}")]
+        public async Task<ActionResult<UserResponseDTO>> DeleteUser(int id)
+        {
+            if (GetCurrentUserRole() != Role.ADMIN)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+
+            var result = await _userService.DeleteUserAsync(id);
+            return Ok(result);
+        }
     }
 }

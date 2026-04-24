@@ -1,4 +1,4 @@
-﻿using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Enums;
 using FinanceSystem_Dotnet.Models;
 
 namespace FinanceSystem_Dotnet.DTOs
@@ -10,25 +10,40 @@ namespace FinanceSystem_Dotnet.DTOs
         public Role role { get; set; }
         public string DepartmentName { get; set; }
     }
-    public class UserUpdateDTO: UserCreateDTO
+    public class UserUpdateDTO
     {
-        public bool Active{ get; set; }
+        public string? Name { get; set; }
+        public string? Password { get; set; }
+        public Role? role { get; set; }
+        public bool? Active { get; set; }
+        public string? DepartmentName { get; set; }
     }
     public class UserLoginDTO
     {
-        public string Username { get; set; }
+        public string Name { get; set; }
         public string Password { get; set; }
 
     }
+    public class UserQueryDTO
+    {
+        public string? Name { get; set; }
+        public string? Department { get; set; }
+        public Role? Role { get; set; }
+        public bool? Active { get; set; }
+        public int Page { get; set; } = 1;
+        public int PerPage { get; set; } = 10;
+    }
     public class UserResponseDTO
     {
+        public UserResponseDTO() { }
+
         public UserResponseDTO(User user)
         {
             Id = user.Id;
             Name = user.Name;
             role = user.Role;
             CreatedAt = user.CreatedAt.ToLocalTime();
-            LastLogin = user.LastLogin.Value.ToLocalTime();
+            LastLogin = user.LastLogin?.ToLocalTime();
             Active = user.Active;
             DepartmentName = user.DepartmentName;
 

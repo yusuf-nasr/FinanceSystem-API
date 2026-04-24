@@ -1,5 +1,6 @@
 using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Filters;
 using FinanceSystem_Dotnet.Services;
 using FinanceSystem_Dotnet.Transformers;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -16,7 +17,10 @@ namespace FinanceSystem_Dotnet
             var builder = WebApplication.CreateBuilder(args);
 
             // Add services to the container.
-            builder.Services.AddControllers();
+            builder.Services.AddControllers(options =>
+            {
+                options.Filters.Add<ApiExceptionFilter>();
+            });
             builder.Services.AddDbContext<FinanceDbContext>(options =>
                 options.UseLazyLoadingProxies().UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
@@ -48,6 +52,14 @@ namespace FinanceSystem_Dotnet
                 };
             });
             builder.Services.AddScoped<IFinanceService, Services.Services>();
+            builder.Services.AddScoped<IAuthService, AuthService>();
+            builder.Services.AddScoped<IUserService, UserService>();
+            builder.Services.AddScoped<IDepartmentService, DepartmentService>();
+            builder.Services.AddScoped<IDocumentService, DocumentService>();
+            builder.Services.AddScoped<ITransactionService, TransactionService>();
+            builder.Services.AddScoped<ITransactionForwardService, TransactionForwardService>();
+            builder.Services.AddScoped<ITransactionTypeService, TransactionTypeService>();
+            builder.Services.AddScoped<IBudgetCategoryService, BudgetCategoryService>();
 
             var app = builder.Build();
 
