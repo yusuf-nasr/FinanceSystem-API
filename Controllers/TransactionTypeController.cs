@@ -1,4 +1,6 @@
-﻿using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,74 +10,69 @@ namespace FinanceSystem_Dotnet.Controllers
 {
     [Route("api/v1/transactions/types")]
     [ApiController]
+    [Authorize]
     public class TransactionTypeController : ControllerBase
     {
         private readonly ITransactionTypeService _transactionTypeService;
-        private readonly IFinanceService _financeService;
 
-        public TransactionTypeController(ITransactionTypeService transactionTypeService, IFinanceService financeService)
+        public TransactionTypeController(ITransactionTypeService transactionTypeService)
         {
             _transactionTypeService = transactionTypeService;
-            _financeService = financeService;
         }
 
+        private int GetCurrentUserId() =>
+            int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+
+        private Role GetCurrentUserRole()
+        {
+            var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+            return Enum.TryParse<Role>(roleStr, out var role) ? role : Role.USER;
+        }
+
+        // POST /api/v1/transactions/types
         [HttpPost]
-        [Authorize]
         public async Task<IActionResult> CreateTransactionType(TransactionTypeCreateDTO request)
         {
-            var creatorId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value ?? "0");
+            var creatorId = GetCurrentUserId();
             var result = await _transactionTypeService.CreateAsync(request, creatorId);
-            if (!result.Success)
-            {
-                return BadRequest(result.Message);
-            }
-            return Ok(result.Message);
+            return StatusCode(201, result);
         }
 
+        // GET /api/v1/transactions/types
         [HttpGet]
-        [Authorize]
-        public async Task<IActionResult> GetTransactionTypes([FromQuery] int page = 1, [FromQuery] int perPage = 10)
+        public async Task<IActionResult> GetTransactionTypes([FromQuery] TransactionTypeQueryDTO query)
         {
-            var paginated = await _transactionTypeService.GetAllPaginatedAsync(page, perPage);
+            var role = GetCurrentUserRole();
+
+            // Only admin can filter by creatorId
+            if (query.CreatorId.HasValue && role != Role.ADMIN)
+                throw new ApiException(403, ErrorCode.RESTRICTED_FIELD_UPDATE,
+                    new Dictionary<string, object> { { "fields", "creatorId" } });
+
+            var paginated = await _transactionTypeService.FindAllAsync(query);
             return Ok(paginated);
         }
 
+        // GET /api/v1/transactions/types/:name
         [HttpGet("{name}")]
-        [Authorize]
         public async Task<IActionResult> GetTransactionTypeByName(string name)
         {
             var result = await _transactionTypeService.GetByNameAsync(name);
             if (result == null)
-            {
-                return NotFound("Transaction type not found.");
-            }
+                throw new ApiException(404, ErrorCode.TRANSACTION_TYPE_NOT_FOUND,
+                    new Dictionary<string, object> { { "name", name } });
             return Ok(result);
         }
 
+        // DELETE /api/v1/transactions/types/:name
         [HttpDelete("{name}")]
-        [Authorize]
         public async Task<IActionResult> DeleteTransactionType(string name)
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
+            var userId = GetCurrentUserId();
+            var isAdmin = GetCurrentUserRole() == Role.ADMIN;
 
-            // Check permission before deleting — need to look up the type first
-            var transactionType = await _transactionTypeService.GetByNameAsync(name);
-            if (transactionType == null)
-            {
-                return NotFound("Transaction type not found.");
-            }
-
-            if (!(_financeService.IsAdmin(UID) || transactionType.CreatorId == UID))
-            {
-                return Forbid("Only admins or creator can delete transaction types.");
-            }
-
-            var result = await _transactionTypeService.DeleteAsync(name);
-            if (!result.Success)
-            {
-                return NotFound(result.Message);
-            }
-            return Ok(result.Message);
+            var result = await _transactionTypeService.DeleteAsync(name, userId, isAdmin);
+            return Ok(result);
         }
     }
 }

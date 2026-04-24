@@ -4,12 +4,10 @@ namespace FinanceSystem_Dotnet.Services
 {
     public interface IUserService
     {
-        Task<(bool Success, string Message)> CreateUserAsync(UserCreateDTO request);
-        Task<List<UserResponseDTO>> GetAllUsersAsync();
-        Task<PaginatedResult<UserResponseDTO>> GetAllUsersPaginatedAsync(int page, int perPage);
+        Task<UserResponseDTO> CreateUserAsync(UserCreateDTO request);
+        Task<PaginatedResult<UserResponseDTO>> FindAllAsync(UserQueryDTO query);
         Task<UserResponseDTO?> GetUserByIdAsync(int id);
-        Task<(bool Success, string Message)> UpdateUserAsync(int id, UserUpdateDTO request, bool isAdmin);
-        Task<(bool Success, string Message)> DeleteUserAsync(int id);
-        Task<PaginatedResult<UserResponseDTO>> SearchUsersByNameAsync(string name, int page, int perPage);
+        Task<UserResponseDTO> UpdateUserAsync(int id, UserUpdateDTO request);
+        Task<UserResponseDTO> DeleteUserAsync(int id);
     }
 }

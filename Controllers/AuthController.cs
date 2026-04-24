@@ -1,4 +1,6 @@
-﻿using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Mvc;
 
@@ -20,16 +22,13 @@ namespace FinanceSystem_Dotnet.Controllers
         {
             var result = _authService.Login(request.Name, request.Password);
             if (result == null)
-            {
-                return Unauthorized(new { message = "Invalid username or password" });
-            }
+                throw new ApiException(401, ErrorCode.INVALID_CREDENTIALS);
 
             return Ok(new
             {
-                message = "Login successful",
-                user = result.Value.User,
                 access_token = result.Value.AccessToken,
-                refresh_token = result.Value.RefreshToken
+                refresh_token = result.Value.RefreshToken,
+                user = result.Value.User,
             });
         }
 
@@ -38,15 +37,13 @@ namespace FinanceSystem_Dotnet.Controllers
         {
             var result = _authService.Refresh(request.RefreshToken);
             if (result == null)
-            {
-                return Unauthorized(new { message = "Invalid or expired refresh token" });
-            }
+                throw new ApiException(401, ErrorCode.INVALID_REFRESH_TOKEN);
 
             return Ok(new
             {
-                user = result.Value.User,
                 access_token = result.Value.AccessToken,
-                refresh_token = result.Value.RefreshToken
+                refresh_token = result.Value.RefreshToken,
+                user = result.Value.User,
             });
         }
     }

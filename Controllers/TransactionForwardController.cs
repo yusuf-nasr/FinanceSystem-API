@@ -1,4 +1,6 @@
 using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -18,14 +20,19 @@ namespace FinanceSystem_Dotnet.Controllers
             _forwardService = forwardService;
         }
 
+        private int GetCurrentUserId() =>
+            int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+
+        // POST /api/v1/transaction/:transactionId/forward
         [HttpPost]
         public async Task<ActionResult<TransactionForwardDTO>> Create(int transactionId, TransactionForwardCreateDTO dto)
         {
-            var senderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var senderId = GetCurrentUserId();
             var result = await _forwardService.CreateAsync(transactionId, dto, senderId);
-            return CreatedAtAction(nameof(FindOne), new { transactionId, id = result.Id }, result);
+            return CreatedAtAction(nameof(FindOne), new { transactionId, id = result!.Id }, result);
         }
 
+        // GET /api/v1/transaction/:transactionId/forward
         [HttpGet]
         public async Task<ActionResult> FindAll(int transactionId, [FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
@@ -33,70 +40,67 @@ namespace FinanceSystem_Dotnet.Controllers
             return Ok(result);
         }
 
+        // GET /api/v1/transaction/:transactionId/forward/:id
         [HttpGet("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> FindOne(int transactionId, int id)
         {
-            var userId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var userId = GetCurrentUserId();
             var result = await _forwardService.FindOneAsync(transactionId, id);
-            if (result == null) return NotFound();
+            if (result == null)
+                throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
 
-            // Mark as seen
-            await _forwardService.MarkAsSeenAsync(transactionId, id, userId);
+            // Mark as seen (fire-and-forget like Node's `void markAsSeen`)
+            _ = _forwardService.MarkAsSeenAsync(transactionId, id, userId);
 
             return Ok(result);
         }
 
+        // PATCH /api/v1/transaction/:transactionId/forward/:id — Update sender comment
         [HttpPatch("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> UpdateSender(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
         {
-            var senderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var senderId = GetCurrentUserId();
             var result = await _forwardService.UpdateSenderAsync(transactionId, id, dto, senderId);
-            if (result == null) return NotFound();
+            if (result == null)
+                throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
             return Ok(result);
         }
 
+        // POST /api/v1/transaction/:transactionId/forward/:id/response — Create response
         [HttpPost("{id}/response")]
         public async Task<ActionResult<TransactionForwardDTO>> Respond(int transactionId, int id, TransactionForwardUpdateDTO dto)
         {
-            var receiverId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var receiverId = GetCurrentUserId();
             var result = await _forwardService.RespondAsync(transactionId, id, dto, receiverId);
-            if (result == null) return NotFound();
+            if (result == null)
+                throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
             return Ok(result);
         }
 
+        // PATCH /api/v1/transaction/:transactionId/forward/:id/response — Update response
         [HttpPatch("{id}/response")]
         public async Task<ActionResult<TransactionForwardDTO>> UpdateResponse(int transactionId, int id, TransactionForwardUpdateDTO dto)
         {
-            var receiverId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var receiverId = GetCurrentUserId();
             var result = await _forwardService.UpdateResponseAsync(transactionId, id, dto, receiverId);
-            if (result == null) return NotFound();
+            if (result == null)
+                throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
             return Ok(result);
         }
 
-        [HttpPatch("{id}/sender-comment")]
-        public async Task<ActionResult<TransactionForwardDTO>> EditSenderComment(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
-        {
-            var senderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-            var result = await _forwardService.EditSenderCommentAsync(transactionId, id, dto.Comment, senderId);
-            if (result == null) return NotFound();
-            return Ok(result);
-        }
-
-        [HttpPatch("{id}/receiver-comment")]
-        public async Task<ActionResult<TransactionForwardDTO>> EditReceiverComment(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
-        {
-            var receiverId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
-            var result = await _forwardService.EditReceiverCommentAsync(transactionId, id, dto.Comment, receiverId);
-            if (result == null) return NotFound();
-            return Ok(result);
-        }
-
+        // DELETE /api/v1/transaction/:transactionId/forward/:id — Undo a forward
         [HttpDelete("{id}")]
         public async Task<ActionResult<TransactionForwardDTO>> Remove(int transactionId, int id)
         {
-            var senderId = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+            var senderId = GetCurrentUserId();
             var result = await _forwardService.DeleteAsync(transactionId, id, senderId);
-            if (result == null) return NotFound();
+            if (result == null)
+                throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
             return Ok(result);
         }
     }

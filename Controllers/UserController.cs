@@ -1,4 +1,4 @@
-﻿using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.DTOs;
 using FinanceSystem_Dotnet.Enums;
 using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Services;
@@ -10,116 +10,111 @@ namespace FinanceSystem_Dotnet.Controllers
 {
     [Route("api/v1/users")]
     [ApiController]
+    [Authorize]
     public class UserController : ControllerBase
     {
         private readonly IUserService _userService;
-        private readonly IFinanceService _financeService;
 
-        public UserController(IUserService userService, IFinanceService financeService)
+        public UserController(IUserService userService)
         {
             _userService = userService;
-            _financeService = financeService;
         }
 
-        [Authorize]
-        [HttpPost]
-        public async Task<ActionResult> CreateUser([FromBody] UserCreateDTO request)
+        private int GetCurrentUserId() =>
+            int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value!);
+
+        private Role GetCurrentUserRole()
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!_financeService.IsAdmin(UID))
-            {
-                return Forbid();
-            }
+            var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+            return Enum.TryParse<Role>(roleStr, out var role) ? role : Role.USER;
+        }
+
+        // POST /api/v1/users — Admin only
+        [HttpPost]
+        public async Task<ActionResult<UserResponseDTO>> CreateUser([FromBody] UserCreateDTO request)
+        {
+            if (GetCurrentUserRole() != Role.ADMIN)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
 
             var result = await _userService.CreateUserAsync(request);
-            if (!result.Success)
-            {
-                return BadRequest(new { message = result.Message });
-            }
-            return Ok(new { message = result.Message });
+            return StatusCode(201, result);
         }
 
+        // GET /api/v1/users
         [HttpGet]
-        [Authorize]
-        public async Task<ActionResult> GetUsers([FromQuery] int page = 1, [FromQuery] int perPage = 10)
+        public async Task<ActionResult<PaginatedResult<UserResponseDTO>>> GetUsers([FromQuery] UserQueryDTO query)
         {
-            var paginated = await _userService.GetAllUsersPaginatedAsync(page, perPage);
-            return Ok(paginated);
-        }
+            var role = GetCurrentUserRole();
 
-        [HttpGet("search")]
-        [Authorize]
-        public async Task<ActionResult> SearchUsers([FromQuery] string name, [FromQuery] int page = 1, [FromQuery] int perPage = 10)
-        {
-            if (string.IsNullOrWhiteSpace(name))
-                return BadRequest(new { message = "Name query parameter is required" });
+            // Non-admins cannot filter by active status
+            if (role != Role.ADMIN && query.Active.HasValue)
+                throw new ApiException(403, ErrorCode.RESTRICTED_FIELD_UPDATE,
+                    new Dictionary<string, object> { { "fields", "active" } });
 
-            var result = await _userService.SearchUsersByNameAsync(name, page, perPage);
+            var result = await _userService.FindAllAsync(query);
             return Ok(result);
         }
 
-        [HttpGet("{id}")]
-        [Authorize]
-        public async Task<ActionResult> GetUserById(int id)
+        // GET /api/v1/users/me
+        [HttpGet("me")]
+        public async Task<ActionResult<UserResponseDTO>> GetMe()
         {
-            var user = await _userService.GetUserByIdAsync(id);
+            var userId = GetCurrentUserId();
+            var user = await _userService.GetUserByIdAsync(userId);
             if (user == null)
-            {
-                return NotFound(new { message = "User not found" });
-            }
+                throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", userId } });
             return Ok(user);
         }
 
-        [HttpPatch("{id}")]
-        [Authorize]
-        public async Task<ActionResult> UpdateUser(int id, [FromBody] UserUpdateDTO request)
+        // GET /api/v1/users/:id
+        [HttpGet("{id}")]
+        public async Task<ActionResult<UserResponseDTO>> GetUserById(int id)
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            var isAdmin = _financeService.IsAdmin(UID);
-            if (!isAdmin && UID != id)
-            {
-                return Forbid();
-            }
+            var user = await _userService.GetUserByIdAsync(id);
+            if (user == null)
+                throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id } });
+            return Ok(user);
+        }
 
-            // Non-admin users can only update 'name' and 'password'
+        // PATCH /api/v1/users/:id
+        [HttpPatch("{id}")]
+        public async Task<ActionResult<UserResponseDTO>> UpdateUser(int id, [FromBody] UserUpdateDTO request)
+        {
+            var uid = GetCurrentUserId();
+            var isAdmin = GetCurrentUserRole() == Role.ADMIN;
+
+            // Only admin can update other users; a user can only update themselves
+            if (!isAdmin && uid != id)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+
+            // Non-admins can only update 'name' and 'password'
             if (!isAdmin)
             {
                 var forbiddenFields = new List<string>();
-                if (request.role != default) forbiddenFields.Add("role");
-                if (request.Active != default) forbiddenFields.Add("active");
-                if (!string.IsNullOrEmpty(request.DepartmentName)) forbiddenFields.Add("departmentName");
+                if (request.role.HasValue) forbiddenFields.Add("role");
+                if (request.Active.HasValue) forbiddenFields.Add("active");
+                if (request.DepartmentName != null) forbiddenFields.Add("departmentName");
 
                 if (forbiddenFields.Count > 0)
-                {
                     throw new ApiException(403, ErrorCode.RESTRICTED_FIELD_UPDATE,
                         new Dictionary<string, object> { { "fields", string.Join(", ", forbiddenFields) } });
-                }
             }
 
-            var result = await _userService.UpdateUserAsync(id, request, isAdmin);
-            if (!result.Success)
-            {
-                return NotFound(new { message = result.Message });
-            }
-            return Ok(new { message = result.Message });
+            var result = await _userService.UpdateUserAsync(id, request);
+            return Ok(result);
         }
 
+        // DELETE /api/v1/users/:id — Admin only
         [HttpDelete("{id}")]
-        [Authorize]
-        public async Task<ActionResult> DeleteUser(int id)
+        public async Task<ActionResult<UserResponseDTO>> DeleteUser(int id)
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!_financeService.IsAdmin(UID))
-            {
-                return Forbid();
-            }
+            if (GetCurrentUserRole() != Role.ADMIN)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
 
             var result = await _userService.DeleteUserAsync(id);
-            if (!result.Success)
-            {
-                return NotFound(new { message = result.Message });
-            }
-            return Ok(new { message = result.Message });
+            return Ok(result);
         }
     }
 }

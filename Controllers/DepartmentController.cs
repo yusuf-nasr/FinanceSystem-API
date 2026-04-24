@@ -1,4 +1,6 @@
-﻿using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -8,91 +10,83 @@ namespace FinanceSystem_Dotnet.Controllers
 {
     [Route("api/v1/departments")]
     [ApiController]
+    [Authorize]
     public class DepartmentController : ControllerBase
     {
         private readonly IDepartmentService _departmentService;
-        private readonly IFinanceService _financeService;
 
-        public DepartmentController(IDepartmentService departmentService, IFinanceService financeService)
+        public DepartmentController(IDepartmentService departmentService)
         {
             _departmentService = departmentService;
-            _financeService = financeService;
         }
 
+        private Role GetCurrentUserRole()
+        {
+            var roleStr = User.FindFirst(ClaimTypes.Role)?.Value;
+            return Enum.TryParse<Role>(roleStr, out var role) ? role : Role.USER;
+        }
+
+        // POST /api/v1/departments — Admin only
         [HttpPost]
-        [Authorize]
         public async Task<IActionResult> CreateDepartment(DeptCreateDTO request)
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!_financeService.IsAdmin(UID))
-            {
-                return Forbid("Only admins can create departments.");
-            }
+            if (GetCurrentUserRole() != Role.ADMIN)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
 
             var result = await _departmentService.CreateDepartmentAsync(request);
             if (!result.Success)
-            {
                 return BadRequest(result.Message);
-            }
-            return Ok(result.Message);
+            return StatusCode(201, result.Message);
         }
 
+        // GET /api/v1/departments
         [HttpGet]
-        [Authorize]
         public async Task<IActionResult> GetDepartments([FromQuery] int page = 1, [FromQuery] int perPage = 10)
         {
             var paginated = await _departmentService.GetAllDepartmentsPaginatedAsync(page, perPage);
             return Ok(paginated);
         }
 
+        // GET /api/v1/departments/:name
         [HttpGet("{name}")]
-        [Authorize]
         public async Task<IActionResult> GetDepartmentByName(string name)
         {
             var department = await _departmentService.GetDepartmentByNameAsync(name);
             if (department == null)
-            {
-                return NotFound("Department not found.");
-            }
+                throw new ApiException(404, ErrorCode.DEPARTMENT_NOT_FOUND,
+                    new Dictionary<string, object> { { "name", name } });
             return Ok(department);
         }
 
+        // PATCH /api/v1/departments/:name — Admin only (Node version does not allow manager updates)
         [HttpPatch("{name}")]
-        [Authorize]
         public async Task<IActionResult> UpdateDepartment(string name, [FromBody] DeptUpdateDTO request)
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!(_financeService.IsAdmin(UID) || _financeService.IsManager(name, UID)))
-            {
-                return Forbid("Only admins and managers can update departments.");
-            }
+            if (GetCurrentUserRole() != Role.ADMIN)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
 
             var result = await _departmentService.UpdateDepartmentAsync(name, request);
             if (!result.Success)
             {
-                // Distinguish between not found and conflict
                 if (result.Message.Contains("not found"))
-                    return NotFound(result.Message);
+                    throw new ApiException(404, ErrorCode.DEPARTMENT_NOT_FOUND,
+                        new Dictionary<string, object> { { "name", name } });
                 return BadRequest(result.Message);
             }
             return Ok(result.Message);
         }
 
+        // DELETE /api/v1/departments/:name — Admin only
         [HttpDelete("{name}")]
-        [Authorize]
         public async Task<IActionResult> DeleteDepartment(string name)
         {
-            int UID = int.Parse(User.FindFirst(ClaimTypes.NameIdentifier)?.Value);
-            if (!_financeService.IsAdmin(UID))
-            {
-                return Forbid("Only admins can delete departments.");
-            }
+            if (GetCurrentUserRole() != Role.ADMIN)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE);
 
             var result = await _departmentService.DeleteDepartmentAsync(name);
             if (!result.Success)
-            {
-                return NotFound(result.Message);
-            }
+                throw new ApiException(404, ErrorCode.DEPARTMENT_NOT_FOUND,
+                    new Dictionary<string, object> { { "name", name } });
             return Ok(result.Message);
         }
     }

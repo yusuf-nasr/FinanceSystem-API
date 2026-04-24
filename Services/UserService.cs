@@ -1,5 +1,7 @@
 using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -14,15 +16,14 @@ namespace FinanceSystem_Dotnet.Services
             _context = context;
         }
 
-        public async Task<(bool Success, string Message)> CreateUserAsync(UserCreateDTO request)
+        public async Task<UserResponseDTO> CreateUserAsync(UserCreateDTO request)
         {
             if (_context.Users.Any(u => u.Name == request.Name))
-            {
-                return (false, "Username already exists");
-            }
+                throw new ApiException(409, ErrorCode.USER_ALREADY_EXISTS,
+                    new Dictionary<string, object> { { "name", request.Name } });
 
             var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
-            _context.Users.Add(new User
+            var user = new User
             {
                 Name = request.Name,
                 HashedPassword = hashedPassword,
@@ -30,32 +31,42 @@ namespace FinanceSystem_Dotnet.Services
                 Active = true,
                 Role = request.role,
                 DepartmentName = request.DepartmentName
-            });
+            };
+            _context.Users.Add(user);
             await _context.SaveChangesAsync();
-            return (true, $"User {request.Name} created successfully");
+            return new UserResponseDTO(user);
         }
 
-        public async Task<List<UserResponseDTO>> GetAllUsersAsync()
+        public async Task<PaginatedResult<UserResponseDTO>> FindAllAsync(UserQueryDTO query)
         {
-            var users = await _context.Users.ToListAsync();
-            return users.Select(u => new UserResponseDTO(u)).ToList();
-        }
+            // Default: only active users (unless admin explicitly filters)
+            IQueryable<User> q = _context.Users.Where(u => u.Active);
 
-        public async Task<PaginatedResult<UserResponseDTO>> GetAllUsersPaginatedAsync(int page, int perPage)
-        {
-            var query = _context.Users
-                .Select(u => new UserResponseDTO
-                {
-                    Id = u.Id,
-                    Name = u.Name,
-                    role = u.Role,
-                    CreatedAt = u.CreatedAt,
-                    LastLogin = u.LastLogin,
-                    Active = u.Active,
-                    DepartmentName = u.DepartmentName
-                });
+            if (query.Active.HasValue)
+                q = _context.Users.Where(u => u.Active == query.Active.Value);
 
-            return await PaginatedResult<UserResponseDTO>.CreateAsync(query, page, perPage);
+            if (!string.IsNullOrWhiteSpace(query.Name))
+                q = q.Where(u => u.Name.ToLower().Contains(query.Name.ToLower()));
+
+            if (!string.IsNullOrWhiteSpace(query.Department))
+                q = q.Where(u => u.DepartmentName != null &&
+                    u.DepartmentName.ToLower().Contains(query.Department.ToLower()));
+
+            if (query.Role.HasValue)
+                q = q.Where(u => u.Role == query.Role.Value);
+
+            var projected = q.Select(u => new UserResponseDTO
+            {
+                Id = u.Id,
+                Name = u.Name,
+                role = u.Role,
+                CreatedAt = u.CreatedAt,
+                LastLogin = u.LastLogin,
+                Active = u.Active,
+                DepartmentName = u.DepartmentName
+            });
+
+            return await PaginatedResult<UserResponseDTO>.CreateAsync(projected, query.Page, query.PerPage);
         }
 
         public async Task<UserResponseDTO?> GetUserByIdAsync(int id)
@@ -65,68 +76,43 @@ namespace FinanceSystem_Dotnet.Services
             return new UserResponseDTO(user);
         }
 
-        public async Task<(bool Success, string Message)> UpdateUserAsync(int id, UserUpdateDTO request, bool isAdmin)
+        public async Task<UserResponseDTO> UpdateUserAsync(int id, UserUpdateDTO request)
         {
             var user = await _context.Users.FindAsync(id);
             if (user == null)
-            {
-                return (false, "User not found");
-            }
+                throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id } });
 
-            if (!string.IsNullOrEmpty(request.Name))
-            {
-                user.Name = request.Name;
-            }
-            if (!string.IsNullOrEmpty(request.Password))
-            {
+            if (request.Name != null) user.Name = request.Name;
+            if (request.Password != null)
                 user.HashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
-            }
-            if (request.Active.ToString() != "" && isAdmin)
-            {
-                user.Active = request.Active;
-            }
-            if (request.role.ToString() != "" && isAdmin)
-            {
-                user.Role = request.role;
-            }
-            if (!string.IsNullOrEmpty(request.DepartmentName) && isAdmin)
-            {
-                user.DepartmentName = request.DepartmentName;
-            }
+            if (request.Active.HasValue) user.Active = request.Active.Value;
+            if (request.role.HasValue) user.Role = request.role.Value;
+            if (request.DepartmentName != null) user.DepartmentName = request.DepartmentName;
 
             await _context.SaveChangesAsync();
-            return (true, $"User {user.Name} updated successfully");
+            return new UserResponseDTO(user);
         }
 
-        public async Task<(bool Success, string Message)> DeleteUserAsync(int id)
+        public async Task<UserResponseDTO> DeleteUserAsync(int id)
         {
             var user = await _context.Users.FindAsync(id);
             if (user == null)
+                throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id } });
+
+            try
             {
-                return (false, "User not found");
+                _context.Users.Remove(user);
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                throw new ApiException(409, ErrorCode.USER_ENGAGED_IN_SYSTEM,
+                    new Dictionary<string, object> { { "id", id } });
             }
 
-            _context.Users.Remove(user);
-            await _context.SaveChangesAsync();
-            return (true, $"User {user.Name} deleted successfully");
-        }
-
-        public async Task<PaginatedResult<UserResponseDTO>> SearchUsersByNameAsync(string name, int page, int perPage)
-        {
-            var query = _context.Users
-                .Where(u => u.Name.ToLower().Contains(name.ToLower()))
-                .Select(u => new UserResponseDTO
-                {
-                    Id = u.Id,
-                    Name = u.Name,
-                    role = u.Role,
-                    CreatedAt = u.CreatedAt,
-                    LastLogin = u.LastLogin,
-                    Active = u.Active,
-                    DepartmentName = u.DepartmentName
-                });
-
-            return await PaginatedResult<UserResponseDTO>.CreateAsync(query, page, perPage);
+            return new UserResponseDTO(user);
         }
     }
 }

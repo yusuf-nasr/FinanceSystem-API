@@ -59,6 +59,7 @@ namespace FinanceSystem_Dotnet
             builder.Services.AddScoped<ITransactionService, TransactionService>();
             builder.Services.AddScoped<ITransactionForwardService, TransactionForwardService>();
             builder.Services.AddScoped<ITransactionTypeService, TransactionTypeService>();
+            builder.Services.AddScoped<IBudgetCategoryService, BudgetCategoryService>();
 
             var app = builder.Build();
 

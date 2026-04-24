@@ -1,4 +1,4 @@
-﻿using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Enums;
 
 namespace FinanceSystem_Dotnet.DTOs
 {
@@ -13,6 +13,8 @@ namespace FinanceSystem_Dotnet.DTOs
         public DateTime CreatedAt { get; set; }
         public int CreatorId { get; set; }
         public string TransactionTypeName { get; set; }
+        public string? BudgetName { get; set; }
+        public double? BudgetAllocation { get; set; }
         public virtual ICollection<DocumentResponseDTO> Documents { get; set; }
     }
 
@@ -45,11 +47,12 @@ namespace FinanceSystem_Dotnet.DTOs
 
     public class TransactionUpdateDTO
     {
-        public string Title { get; set; }
-        public string Description { get; set; }
-        public string TransactionTypeName { get; set; }
-        public TransactionPriority Priority { get; set; }
-        public bool Fulfilled { get; set; }
-        public IEnumerable<int> DocumentIds { get; set; }
+        public string? Title { get; set; }
+        public string? Description { get; set; }
+        public string? TransactionTypeName { get; set; }
+        public TransactionPriority? Priority { get; set; }
+        public bool? Fulfilled { get; set; }
+        public string? BudgetName { get; set; }
+        public double? BudgetAllocation { get; set; }
     }
 }

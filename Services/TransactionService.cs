@@ -88,12 +88,10 @@ namespace FinanceSystem_Dotnet.Services
 
             transactionsQuery = transactionsQuery.OrderByDescending(t => t.CreatedAt);
 
-            // Get total count and paginated results
             var totalCount = await transactionsQuery.CountAsync();
             var lastPage = (int)Math.Ceiling((double)totalCount / perPage);
             var items = await transactionsQuery.Skip((page - 1) * perPage).Take(perPage).ToListAsync();
 
-            // Compute summary counts from the full result set
             var allForStatus = await transactionsQuery.Select(t => new
             {
                 LastForwardStatus = t.Forwards.OrderByDescending(f => f.Id).FirstOrDefault() != null
@@ -146,44 +144,45 @@ namespace FinanceSystem_Dotnet.Services
             if (transaction == null) return false;
             if (transaction.CreatorId == userId) return true;
 
-            var latestForward = transaction.Forwards?.OrderByDescending(f => f.Id).FirstOrDefault();
-            if (latestForward != null && (latestForward.SenderId == userId || latestForward.ReceiverId == userId))
+            if (transaction.Forwards != null &&
+                transaction.Forwards.Any(f => f.SenderId == userId || f.ReceiverId == userId))
                 return true;
 
             return false;
         }
 
-        public async Task<bool> IsLastReceiver(int transactionId, int userId)
+        public async Task<bool> IsCreator(int transactionId, int userId)
         {
-            var latestForward = await _context.TransactionForwards
+            var transaction = await _context.Transactions
+                .FirstOrDefaultAsync(t => t.Id == transactionId);
+            return transaction?.CreatorId == userId;
+        }
+
+        public async Task<TransactionForward?> FindLatestForward(int transactionId)
+        {
+            return await _context.TransactionForwards
                 .Where(f => f.TransactionId == transactionId)
                 .OrderByDescending(f => f.Id)
                 .FirstOrDefaultAsync();
-
-            return latestForward != null && latestForward.ReceiverId == userId;
         }
 
         public async Task MarkAsSeenAsync(int transactionId, int userId)
         {
-            var transaction = await _context.Transactions
-                .Include(t => t.Forwards)
-                .FirstOrDefaultAsync(t => t.Id == transactionId);
+            // Node.js uses updateMany to mark ALL forwards for sender/receiver as seen
+            var forwardsAsSender = await _context.TransactionForwards
+                .Where(f => f.TransactionId == transactionId && f.SenderId == userId && !f.SenderSeen)
+                .ToListAsync();
+            foreach (var f in forwardsAsSender)
+                f.SenderSeen = true;
 
-            if (transaction == null) return;
+            var forwardsAsReceiver = await _context.TransactionForwards
+                .Where(f => f.TransactionId == transactionId && f.ReceiverId == userId && !f.ReceiverSeen)
+                .ToListAsync();
+            foreach (var f in forwardsAsReceiver)
+                f.ReceiverSeen = true;
 
-            var latestForward = transaction.Forwards?.OrderByDescending(f => f.Id).FirstOrDefault();
-            if (latestForward == null) return;
-
-            if (latestForward.SenderId == userId && !latestForward.SenderSeen)
-            {
-                latestForward.SenderSeen = true;
+            if (forwardsAsSender.Any() || forwardsAsReceiver.Any())
                 await _context.SaveChangesAsync();
-            }
-            else if (latestForward.ReceiverId == userId && !latestForward.ReceiverSeen)
-            {
-                latestForward.ReceiverSeen = true;
-                await _context.SaveChangesAsync();
-            }
         }
 
         public async Task ResetSenderSeenAsync(int transactionId, int receiverUserId)
@@ -197,7 +196,6 @@ namespace FinanceSystem_Dotnet.Services
             var latestForward = transaction.Forwards?.OrderByDescending(f => f.Id).FirstOrDefault();
             if (latestForward == null) return;
 
-            // Only reset if the current user is the receiver of the latest forward
             if (latestForward.ReceiverId == receiverUserId && latestForward.SenderSeen)
             {
                 latestForward.SenderSeen = false;
@@ -222,9 +220,8 @@ namespace FinanceSystem_Dotnet.Services
                 throw new ApiException(404, ErrorCode.TRANSACTION_NOT_FOUND);
 
             var latestForward = transaction.Forwards?.OrderByDescending(f => f.Id).FirstOrDefault();
-            if (latestForward == null) return; // No forwards, no restriction
+            if (latestForward == null) return;
 
-            // If the latest forward has been seen or responded to, restrict document changes
             if (latestForward.Status != TransactionForwardStatus.WAITING)
                 throw new ApiException(403, ErrorCode.FORWARD_ALREADY_RESPONDED);
 
@@ -232,7 +229,17 @@ namespace FinanceSystem_Dotnet.Services
                 throw new ApiException(403, ErrorCode.FORWARD_ALREADY_SEEN);
         }
 
-        public async Task<TransactionDTO?> UpdateAsync(int id, TransactionUpdateDTO dto, int userId)
+        public async Task CheckIfFulfilled(int id)
+        {
+            var transaction = await _context.Transactions
+                .Select(t => new { t.Id, t.Fulfilled })
+                .FirstOrDefaultAsync(t => t.Id == id);
+
+            if (transaction?.Fulfilled == true)
+                throw new ApiException(403, ErrorCode.TRANSACTION_ALREADY_FULFILLED);
+        }
+
+        public async Task<TransactionDTO?> UpdateAsync(int id, TransactionUpdateDTO dto, int userId, Role role)
         {
             var transaction = await _context.Transactions
                 .Include(t => t.Documents)
@@ -240,28 +247,26 @@ namespace FinanceSystem_Dotnet.Services
 
             if (transaction == null) return null;
 
+            // Check if setting fulfilled=true requires budget info
+            if (dto.Fulfilled == true)
+            {
+                if (string.IsNullOrEmpty(dto.BudgetName) || dto.BudgetAllocation == null)
+                    throw new ApiException(400, ErrorCode.MISSING_BUDGET_INFO);
+            }
+
+            // Guard: cannot mutate a fulfilled transaction (unless explicitly un-fulfilling it)
+            // Node.js: if (updateTransactionDto.fulfilled !== false) await this.checkIfFulfilled(id);
+            if (dto.Fulfilled != false)
+                await CheckIfFulfilled(id);
+
+            // Apply null-safe partial updates
             if (dto.Title != null) transaction.Title = dto.Title;
             if (dto.Description != null) transaction.Description = dto.Description;
             if (dto.TransactionTypeName != null) transaction.TransactionTypeName = dto.TransactionTypeName;
-            transaction.Priority = dto.Priority;
-            transaction.Fulfilled = dto.Fulfilled;
-
-            if (dto.DocumentIds != null)
-            {
-                var existingDocs = await _context.TransactionDocuments.Where(td => td.TransactionId == id).ToListAsync();
-                _context.TransactionDocuments.RemoveRange(existingDocs);
-
-                foreach (var docId in dto.DocumentIds)
-                {
-                    _context.TransactionDocuments.Add(new TransactionDocument
-                    {
-                        TransactionId = id,
-                        DocumentId = docId,
-                        AttachedBy = userId,
-                        AttachedAt = DateTime.UtcNow
-                    });
-                }
-            }
+            if (dto.Priority.HasValue) transaction.Priority = dto.Priority.Value;
+            if (dto.Fulfilled.HasValue) transaction.Fulfilled = dto.Fulfilled.Value;
+            if (dto.BudgetName != null) transaction.BudgetName = dto.BudgetName;
+            if (dto.BudgetAllocation.HasValue) transaction.BudgetAllocation = dto.BudgetAllocation.Value;
 
             await _context.SaveChangesAsync();
 
@@ -274,8 +279,10 @@ namespace FinanceSystem_Dotnet.Services
             return MapToDTO(transaction);
         }
 
-        public async Task<TransactionDTO?> DeleteAsync(int id)
+        public async Task<TransactionDTO?> DeleteAsync(int id, Role role)
         {
+            await CheckIfFulfilled(id);
+
             var transaction = await _context.Transactions
                 .Include(t => t.Documents)
                 .Include(t => t.Forwards)
@@ -291,6 +298,8 @@ namespace FinanceSystem_Dotnet.Services
 
         public async Task<TransactionDTO?> AttachDocumentAsync(int transactionId, int documentId, int userId)
         {
+            await CheckIfFulfilled(transactionId);
+
             var existing = await _context.TransactionDocuments
                 .FirstOrDefaultAsync(td => td.TransactionId == transactionId && td.DocumentId == documentId);
 
@@ -306,41 +315,29 @@ namespace FinanceSystem_Dotnet.Services
                 await _context.SaveChangesAsync();
             }
 
-            // Reset sender seen since receiver modified the transaction
             await ResetSenderSeenAsync(transactionId, userId);
 
             return await FindOneAsync(transactionId);
         }
 
-        public async Task<TransactionDTO?> DetachDocumentAsync(int transactionId, int documentId, int userId)
+        public async Task<TransactionDTO?> DetachDocumentAsync(int transactionId, int documentId, int userId, Role role)
         {
+            await CheckIfFulfilled(transactionId);
+
             var existing = await _context.TransactionDocuments
                 .FirstOrDefaultAsync(td => td.TransactionId == transactionId && td.DocumentId == documentId);
 
             if (existing == null)
                 return await FindOneAsync(transactionId);
 
-            // Only the person who attached can detach
-            if (existing.AttachedBy != userId)
-                throw new ApiException(403, ErrorCode.NOT_DOCUMENT_ATTACHER);
-
-            // Document must have been attached during the latest forward
-            var latestForward = await _context.TransactionForwards
-                .Where(f => f.TransactionId == transactionId)
-                .OrderByDescending(f => f.Id)
-                .FirstOrDefaultAsync();
-
-            if (latestForward == null || existing.AttachedAt < latestForward.ForwardedAt)
-                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
-
-            // User must be sender or receiver of the latest forward
-            if (latestForward.SenderId != userId && latestForward.ReceiverId != userId)
-                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT);
+            // Only the person who attached can detach (admin bypasses this check)
+            if (role != Role.ADMIN && existing.AttachedBy != userId)
+                throw new ApiException(403, ErrorCode.NOT_DOCUMENT_ATTACHER,
+                    new Dictionary<string, object> { { "transactionId", transactionId }, { "documentId", documentId } });
 
             _context.TransactionDocuments.Remove(existing);
             await _context.SaveChangesAsync();
 
-            // Reset sender seen since the transaction was modified
             await ResetSenderSeenAsync(transactionId, userId);
 
             return await FindOneAsync(transactionId);
@@ -358,6 +355,8 @@ namespace FinanceSystem_Dotnet.Services
                 CreatedAt = t.CreatedAt,
                 CreatorId = t.CreatorId,
                 TransactionTypeName = t.TransactionTypeName,
+                BudgetName = t.BudgetName,
+                BudgetAllocation = t.BudgetAllocation,
                 LastForwardStatus = t.Forwards?.OrderByDescending(f => f.Id).FirstOrDefault()?.Status,
                 Documents = t.Documents?.Select(d => new DocumentResponseDTO
                 {

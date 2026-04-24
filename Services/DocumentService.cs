@@ -1,5 +1,7 @@
 using FinanceSystem_Dotnet.DAL;
 using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Enums;
+using FinanceSystem_Dotnet.Exceptions;
 using FinanceSystem_Dotnet.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.EntityFrameworkCore;
@@ -45,15 +47,6 @@ namespace FinanceSystem_Dotnet.Services
             return (MapToResponse(document), document.Id);
         }
 
-        public async Task<List<DocumentResponseDTO>> GetDocumentsByUploaderAsync(int uploaderId)
-        {
-            var documents = await _context.Documents
-                .Where(d => d.UploaderId == uploaderId)
-                .ToListAsync();
-
-            return documents.Select(MapToResponse).ToList();
-        }
-
         public async Task<PaginatedResult<DocumentResponseDTO>> GetDocumentsByUploaderPaginatedAsync(int uploaderId, int page, int perPage)
         {
             var query = _context.Documents
@@ -84,15 +77,56 @@ namespace FinanceSystem_Dotnet.Services
             return (document.Content, document.Title);
         }
 
-        public async Task<DocumentResponseDTO?> DeleteDocumentAsync(int id)
+        public async Task<DocumentResponseDTO> DeleteDocumentAsync(int id, int userId, Role role)
         {
             var document = await _context.Documents.FindAsync(id);
-            if (document == null) return null;
+            if (document == null)
+                throw new ApiException(404, ErrorCode.DOCUMENT_NOT_FOUND,
+                    new Dictionary<string, object> { { "id", id } });
 
-            _context.Documents.Remove(document);
-            await _context.SaveChangesAsync();
+            // Only the uploader or admin can delete
+            if (role != Role.ADMIN && document.UploaderId != userId)
+                throw new ApiException(403, ErrorCode.NOT_DOCUMENT_UPLOADER,
+                    new Dictionary<string, object> { { "documentId", id } });
+
+            try
+            {
+                _context.Documents.Remove(document);
+                await _context.SaveChangesAsync();
+            }
+            catch (DbUpdateException)
+            {
+                throw new ApiException(409, ErrorCode.DOCUMENT_ALREADY_USED,
+                    new Dictionary<string, object> { { "id", id } });
+            }
 
             return MapToResponse(document);
+        }
+
+        /// <summary>
+        /// A document is visible to a user if they are the uploader,
+        /// or they are a participant in any transaction that references the document.
+        /// </summary>
+        public async Task<bool> IsVisibleToUser(int documentId, int userId)
+        {
+            var document = await _context.Documents
+                .FirstOrDefaultAsync(d => d.Id == documentId);
+
+            if (document == null) return false;
+
+            // Uploader can always see their own documents
+            if (document.UploaderId == userId) return true;
+
+            // Check if the user is a participant in any transaction that contains this document
+            var isParticipant = await _context.TransactionDocuments
+                .Where(td => td.DocumentId == documentId)
+                .AnyAsync(td =>
+                    _context.Transactions.Any(t => t.Id == td.TransactionId &&
+                        (t.CreatorId == userId ||
+                         t.Forwards.Any(f => f.SenderId == userId || f.ReceiverId == userId)))
+                );
+
+            return isParticipant;
         }
 
         private DocumentResponseDTO MapToResponse(Document document)

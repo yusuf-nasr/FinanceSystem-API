@@ -4,10 +4,9 @@ namespace FinanceSystem_Dotnet.Services
 {
     public interface ITransactionTypeService
     {
-        Task<(bool Success, string Message)> CreateAsync(TransactionTypeCreateDTO request, int creatorId);
-        Task<List<TransactionTypeResponseDTO>> GetAllAsync();
-        Task<PaginatedResult<TransactionTypeResponseDTO>> GetAllPaginatedAsync(int page, int perPage);
+        Task<TransactionTypeResponseDTO> CreateAsync(TransactionTypeCreateDTO request, int creatorId);
+        Task<PaginatedResult<TransactionTypeResponseDTO>> FindAllAsync(TransactionTypeQueryDTO query);
         Task<TransactionTypeResponseDTO?> GetByNameAsync(string name);
-        Task<(bool Success, string Message)> DeleteAsync(string name);
+        Task<TransactionTypeResponseDTO> DeleteAsync(string name, int userId, bool isAdmin);
     }
 }
