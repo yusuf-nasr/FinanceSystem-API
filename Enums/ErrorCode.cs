@@ -50,5 +50,6 @@ namespace FinanceSystem_Dotnet.Enums
         DEPARTMENT_HAS_MEMBERS,
         USER_ENGAGED_IN_SYSTEM,
         BUDGET_CATEGORY_IN_USE,
+        NOTIFICATION_NOT_FOUND,
     }
 }

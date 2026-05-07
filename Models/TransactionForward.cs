@@ -10,7 +10,9 @@ namespace FinanceSystem_Dotnet.Models
         public string? SenderComment { get; set; }
         public string? ReceiverComment { get; set; }
         public bool SenderSeen { get; set; } = true;
+        public DateTime? SenderSeenAt { get; set; }
         public bool ReceiverSeen { get; set; } = false;
+        public DateTime? ReceiverSeenAt { get; set; }
 
         public DateTime ForwardedAt { get; set; }
         public DateTime UpdatedAt { get; set; }

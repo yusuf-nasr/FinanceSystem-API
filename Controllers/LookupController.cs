@@ -17,7 +17,9 @@ namespace FinanceSystem_Dotnet.Controllers
             {
                 UserRole = Enum.GetNames<Role>(),
                 TransactionPriority = Enum.GetNames<TransactionPriority>(),
-                TransactionForwardStatus = Enum.GetNames<TransactionForwardStatus>()
+                TransactionForwardStatus = Enum.GetNames<TransactionForwardStatus>(),
+                UserPresence = Enum.GetNames<UserPresence>(),
+                NotificationType = Enum.GetNames<NotificationType>()
             });
         }
     }

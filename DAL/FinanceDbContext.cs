@@ -18,6 +18,7 @@ namespace FinanceSystem_Dotnet.DAL
         public DbSet<TransactionDocument> TransactionDocuments { get; set; }// for explicit join entity
         public DbSet<BudgetCategory> BudgetCategories { get; set; }
         public DbSet<BudgetEntry> BudgetEntries { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -28,6 +29,7 @@ namespace FinanceSystem_Dotnet.DAL
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.HashedPassword).IsRequired();
                 entity.Property(e => e.Role).IsRequired();
+                entity.Property(e => e.Presence).IsRequired();
 
                 entity.HasOne(e => e.Department)
                     .WithMany(d => d.Users)
@@ -156,6 +158,20 @@ namespace FinanceSystem_Dotnet.DAL
                     .WithMany()
                     .HasForeignKey(e => e.InputterId)
                     .OnDelete(DeleteBehavior.Restrict);
+            });
+
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Timestamp).IsRequired();
+                entity.Property(e => e.Seen).IsRequired();
+                entity.Property(e => e.Type).IsRequired();
+                entity.Property(e => e.Code).IsRequired();
+
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.Notifications)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
             });
         }
     }
