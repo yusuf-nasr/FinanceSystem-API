@@ -5,7 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/lookups")]
+    [Route("api/lookups")]
     [ApiController]
     public class LookupController : ControllerBase
     {

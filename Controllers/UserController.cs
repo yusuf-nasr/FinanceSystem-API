@@ -8,7 +8,7 @@ using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/users")]
+    [Route("api/v0/users")]
     [ApiController]
     [Authorize]
     public class UserController : ControllerBase
@@ -34,7 +34,8 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<ActionResult<UserResponseDTO>> CreateUser([FromBody] UserCreateDTO request)
         {
             if (GetCurrentUserRole() != Role.ADMIN)
-                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+                throw new ApiException(403, ErrorCode.MISSING_ROLE,
+                    new Dictionary<string, object> { { "roles", "ADMIN" } });
 
             var result = await _userService.CreateUserAsync(request);
             return StatusCode(201, result);
@@ -63,7 +64,7 @@ namespace FinanceSystem_Dotnet.Controllers
             var user = await _userService.GetUserByIdAsync(userId);
             if (user == null)
                 throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", userId } });
+                    new Dictionary<string, object> { { "userId", userId.ToString() } });
             return Ok(user);
         }
 
@@ -74,7 +75,7 @@ namespace FinanceSystem_Dotnet.Controllers
             var user = await _userService.GetUserByIdAsync(id);
             if (user == null)
                 throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "userId", id.ToString() } });
             return Ok(user);
         }
 
@@ -87,13 +88,14 @@ namespace FinanceSystem_Dotnet.Controllers
 
             // Only admin can update other users; a user can only update themselves
             if (!isAdmin && uid != id)
-                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+                throw new ApiException(403, ErrorCode.MISSING_ROLE,
+                    new Dictionary<string, object> { { "roles", "ADMIN" } });
 
             // Non-admins can only update 'name' and 'password'
             if (!isAdmin)
             {
                 var forbiddenFields = new List<string>();
-                if (request.role.HasValue) forbiddenFields.Add("role");
+                if (request.Role.HasValue) forbiddenFields.Add("role");
                 if (request.Active.HasValue) forbiddenFields.Add("active");
                 if (request.DepartmentName != null) forbiddenFields.Add("departmentName");
 
@@ -111,7 +113,8 @@ namespace FinanceSystem_Dotnet.Controllers
         public async Task<ActionResult<UserResponseDTO>> DeleteUser(int id)
         {
             if (GetCurrentUserRole() != Role.ADMIN)
-                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+                throw new ApiException(403, ErrorCode.MISSING_ROLE,
+                    new Dictionary<string, object> { { "roles", "ADMIN" } });
 
             var result = await _userService.DeleteUserAsync(id);
             return Ok(result);

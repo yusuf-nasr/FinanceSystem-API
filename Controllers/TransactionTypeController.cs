@@ -8,7 +8,7 @@ using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/transactions/types")]
+    [Route("api/v0/transactions/types")]
     [ApiController]
     [Authorize]
     public class TransactionTypeController : ControllerBase
@@ -60,7 +60,7 @@ namespace FinanceSystem_Dotnet.Controllers
             var result = await _transactionTypeService.GetByNameAsync(name);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_TYPE_NOT_FOUND,
-                    new Dictionary<string, object> { { "name", name } });
+                    new Dictionary<string, object> { { "typeName", name } });
             return Ok(result);
         }
 

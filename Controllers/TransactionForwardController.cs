@@ -8,7 +8,7 @@ using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/transaction/{transactionId}/forward")]
+    [Route("api/v0/transaction/{transactionId}/forward")]
     [ApiController]
     [Authorize]
     public class TransactionForwardController : ControllerBase
@@ -48,7 +48,7 @@ namespace FinanceSystem_Dotnet.Controllers
             var result = await _forwardService.FindOneAsync(transactionId, id);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
+                    new Dictionary<string, object> { { "forwardId", id.ToString() }, { "transactionId", transactionId.ToString() } });
 
             // Mark as seen (fire-and-forget like Node's `void markAsSeen`)
             _ = _forwardService.MarkAsSeenAsync(transactionId, id, userId);
@@ -58,13 +58,16 @@ namespace FinanceSystem_Dotnet.Controllers
 
         // PATCH /api/v1/transaction/:transactionId/forward/:id — Update sender comment
         [HttpPatch("{id}")]
-        public async Task<ActionResult<TransactionForwardDTO>> UpdateSender(int transactionId, int id, TransactionForwardSenderUpdateDTO dto)
+        public async Task<ActionResult<TransactionForwardDTO>> UpdateSender(
+            int transactionId, 
+            int id, 
+            [FromBody(EmptyBodyBehavior = Microsoft.AspNetCore.Mvc.ModelBinding.EmptyBodyBehavior.Allow)] TransactionForwardSenderUpdateDTO? dto)
         {
             var senderId = GetCurrentUserId();
             var result = await _forwardService.UpdateSenderAsync(transactionId, id, dto, senderId);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
+                    new Dictionary<string, object> { { "forwardId", id.ToString() }, { "transactionId", transactionId.ToString() } });
             return Ok(result);
         }
 
@@ -76,8 +79,8 @@ namespace FinanceSystem_Dotnet.Controllers
             var result = await _forwardService.RespondAsync(transactionId, id, dto, receiverId);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
-            return Ok(result);
+                    new Dictionary<string, object> { { "forwardId", id.ToString() }, { "transactionId", transactionId.ToString() } });
+            return StatusCode(201, result);
         }
 
         // PATCH /api/v1/transaction/:transactionId/forward/:id/response — Update response
@@ -88,7 +91,7 @@ namespace FinanceSystem_Dotnet.Controllers
             var result = await _forwardService.UpdateResponseAsync(transactionId, id, dto, receiverId);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
+                    new Dictionary<string, object> { { "forwardId", id.ToString() }, { "transactionId", transactionId.ToString() } });
             return Ok(result);
         }
 
@@ -100,7 +103,7 @@ namespace FinanceSystem_Dotnet.Controllers
             var result = await _forwardService.DeleteAsync(transactionId, id, senderId);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_FORWARD_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id }, { "transactionId", transactionId } });
+                    new Dictionary<string, object> { { "forwardId", id.ToString() }, { "transactionId", transactionId.ToString() } });
             return Ok(result);
         }
     }

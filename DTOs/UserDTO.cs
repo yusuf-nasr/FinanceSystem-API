@@ -7,14 +7,14 @@ namespace FinanceSystem_Dotnet.DTOs
     {
         public string Name { get; set; }
         public string Password { get; set; }
-        public Role role { get; set; }
+        public Role Role { get; set; }
         public string DepartmentName { get; set; }
     }
     public class UserUpdateDTO
     {
         public string? Name { get; set; }
         public string? Password { get; set; }
-        public Role? role { get; set; }
+        public Role? Role { get; set; }
         public bool? Active { get; set; }
         public string? DepartmentName { get; set; }
     }
@@ -41,16 +41,18 @@ namespace FinanceSystem_Dotnet.DTOs
         {
             Id = user.Id;
             Name = user.Name;
-            role = user.Role;
-            CreatedAt = user.CreatedAt.ToLocalTime();
-            LastLogin = user.LastLogin?.ToLocalTime();
+            Role = user.Role;
+            Presence = user.Presence;
+            CreatedAt = user.CreatedAt;
+            LastLogin = user.LastLogin;
             Active = user.Active;
             DepartmentName = user.DepartmentName;
 
         }
         public int Id { get; set; }
         public string Name { get; set; }
-        public Role role { get; set; }
+        public Role Role { get; set; }
+        public UserPresence Presence { get; set; }
         public DateTime CreatedAt { get; set; }
         public DateTime? LastLogin { get; set; }
         public bool Active { get; set; }

@@ -22,7 +22,7 @@ namespace FinanceSystem_Dotnet.Services
         public (UserResponseDTO User, string AccessToken, string RefreshToken)? Login(string name, string password)
         {
             var user = _context.Users.FirstOrDefault(u => u.Name == name);
-            if (user == null || !BCrypt.Net.BCrypt.Verify(password, user.HashedPassword))
+            if (user == null || !Isopoh.Cryptography.Argon2.Argon2.Verify(user.HashedPassword, password))
             {
                 return null;
             }

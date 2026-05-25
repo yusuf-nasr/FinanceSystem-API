@@ -18,18 +18,27 @@ namespace FinanceSystem_Dotnet.Services
 
         public async Task<UserResponseDTO> CreateUserAsync(UserCreateDTO request)
         {
-            if (_context.Users.Any(u => u.Name == request.Name))
+            if (await _context.Users.AnyAsync(u => u.Name == request.Name))
                 throw new ApiException(409, ErrorCode.USER_ALREADY_EXISTS,
-                    new Dictionary<string, object> { { "name", request.Name } });
+                    new Dictionary<string, object> { { "userName", request.Name } });
 
-            var hashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
+            if (!string.IsNullOrEmpty(request.DepartmentName))
+            {
+                var deptExists = await _context.Departments.AnyAsync(d => d.Name == request.DepartmentName);
+                if (!deptExists)
+                    throw new ApiException(404, ErrorCode.DEPARTMENT_NOT_FOUND,
+                        new Dictionary<string, object> { { "departmentName", request.DepartmentName } });
+            }
+
+            var hashedPassword = Isopoh.Cryptography.Argon2.Argon2.Hash(request.Password);
             var user = new User
             {
                 Name = request.Name,
                 HashedPassword = hashedPassword,
                 CreatedAt = DateTime.UtcNow,
                 Active = true,
-                Role = request.role,
+                Role = request.Role,
+                Presence = UserPresence.OFFLINE,
                 DepartmentName = request.DepartmentName
             };
             _context.Users.Add(user);
@@ -59,7 +68,8 @@ namespace FinanceSystem_Dotnet.Services
             {
                 Id = u.Id,
                 Name = u.Name,
-                role = u.Role,
+                Role = u.Role,
+                Presence = u.Presence,
                 CreatedAt = u.CreatedAt,
                 LastLogin = u.LastLogin,
                 Active = u.Active,
@@ -81,14 +91,27 @@ namespace FinanceSystem_Dotnet.Services
             var user = await _context.Users.FindAsync(id);
             if (user == null)
                 throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "userId", id.ToString() } });
 
-            if (request.Name != null) user.Name = request.Name;
+            if (request.Name != null && request.Name != user.Name)
+            {
+                if (await _context.Users.AnyAsync(u => u.Name == request.Name))
+                    throw new ApiException(409, ErrorCode.USER_ALREADY_EXISTS,
+                        new Dictionary<string, object> { { "userName", request.Name } });
+                user.Name = request.Name;
+            }
             if (request.Password != null)
-                user.HashedPassword = BCrypt.Net.BCrypt.HashPassword(request.Password);
+                user.HashedPassword = Isopoh.Cryptography.Argon2.Argon2.Hash(request.Password);
             if (request.Active.HasValue) user.Active = request.Active.Value;
-            if (request.role.HasValue) user.Role = request.role.Value;
-            if (request.DepartmentName != null) user.DepartmentName = request.DepartmentName;
+            if (request.Role.HasValue) user.Role = request.Role.Value;
+            if (request.DepartmentName != null)
+            {
+                var deptExists = await _context.Departments.AnyAsync(d => d.Name == request.DepartmentName);
+                if (!deptExists)
+                    throw new ApiException(404, ErrorCode.DEPARTMENT_NOT_FOUND,
+                        new Dictionary<string, object> { { "departmentName", request.DepartmentName } });
+                user.DepartmentName = request.DepartmentName;
+            }
 
             await _context.SaveChangesAsync();
             return new UserResponseDTO(user);
@@ -99,8 +122,8 @@ namespace FinanceSystem_Dotnet.Services
             var user = await _context.Users.FindAsync(id);
             if (user == null)
                 throw new ApiException(404, ErrorCode.USER_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
-
+                    new Dictionary<string, object> { { "userId", id.ToString() } });
+ 
             try
             {
                 _context.Users.Remove(user);
@@ -109,10 +132,27 @@ namespace FinanceSystem_Dotnet.Services
             catch (DbUpdateException)
             {
                 throw new ApiException(409, ErrorCode.USER_ENGAGED_IN_SYSTEM,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "userId", id.ToString() } });
             }
 
             return new UserResponseDTO(user);
+        }
+
+        public async Task UpdatePresenceAsync(int userId, UserPresence presence)
+        {
+            var user = await _context.Users.FindAsync(userId);
+            if (user != null)
+            {
+                user.Presence = presence;
+                await _context.SaveChangesAsync();
+            }
+        }
+
+        public async Task ResetAllPresenceAsync()
+        {
+            await _context.Users
+                .Where(u => u.Presence == UserPresence.ONLINE)
+                .ExecuteUpdateAsync(s => s.SetProperty(u => u.Presence, UserPresence.OFFLINE));
         }
     }
 }

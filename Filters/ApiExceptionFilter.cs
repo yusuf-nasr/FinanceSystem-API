@@ -20,12 +20,21 @@ namespace FinanceSystem_Dotnet.Filters
 
                 if (apiException.Args != null)
                 {
-                    foreach (var kv in apiException.Args)
-                        messageObj[kv.Key] = kv.Value;
+                    messageObj["args"] = apiException.Args;
                 }
 
                 var httpStatus = (HttpStatusCode)apiException.StatusCode;
-                var errorText = httpStatus.ToString(); // e.g. "Unauthorized", "Forbidden", "NotFound"
+                var errorText = apiException.StatusCode switch
+                {
+                    400 => "Bad Request",
+                    401 => "Unauthorized",
+                    403 => "Forbidden",
+                    404 => "Not Found",
+                    409 => "Conflict",
+                    415 => "Unsupported Media Type",
+                    500 => "Internal Server Error",
+                    _ => httpStatus.ToString()
+                };
 
                 var response = new
                 {

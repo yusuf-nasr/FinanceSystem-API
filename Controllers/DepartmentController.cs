@@ -8,7 +8,7 @@ using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/departments")]
+    [Route("api/v0/departments")]
     [ApiController]
     [Authorize]
     public class DepartmentController : ControllerBase
@@ -28,66 +28,57 @@ namespace FinanceSystem_Dotnet.Controllers
 
         // POST /api/v1/departments — Admin only
         [HttpPost]
-        public async Task<IActionResult> CreateDepartment(DeptCreateDTO request)
+        public async Task<ActionResult<DeptResponseDTO>> CreateDepartment(DeptCreateDTO request)
         {
             if (GetCurrentUserRole() != Role.ADMIN)
-                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+                throw new ApiException(403, ErrorCode.MISSING_ROLE,
+                    new Dictionary<string, object> { { "roles", "ADMIN" } });
 
             var result = await _departmentService.CreateDepartmentAsync(request);
-            if (!result.Success)
-                return BadRequest(result.Message);
-            return StatusCode(201, result.Message);
+            return StatusCode(201, result);
         }
 
         // GET /api/v1/departments
         [HttpGet]
-        public async Task<IActionResult> GetDepartments([FromQuery] int page = 1, [FromQuery] int perPage = 10)
+        public async Task<ActionResult> GetDepartments([FromQuery] DeptQueryDTO query)
         {
-            var paginated = await _departmentService.GetAllDepartmentsPaginatedAsync(page, perPage);
+            var paginated = await _departmentService.GetAllDepartmentsPaginatedAsync(query);
             return Ok(paginated);
         }
 
         // GET /api/v1/departments/:name
         [HttpGet("{name}")]
-        public async Task<IActionResult> GetDepartmentByName(string name)
+        public async Task<ActionResult<DeptResponseDTO>> GetDepartmentByName(string name)
         {
             var department = await _departmentService.GetDepartmentByNameAsync(name);
             if (department == null)
                 throw new ApiException(404, ErrorCode.DEPARTMENT_NOT_FOUND,
-                    new Dictionary<string, object> { { "name", name } });
+                    new Dictionary<string, object> { { "departmentName", name } });
             return Ok(department);
         }
 
-        // PATCH /api/v1/departments/:name — Admin only (Node version does not allow manager updates)
+        // PATCH /api/v1/departments/:name — Admin only
         [HttpPatch("{name}")]
-        public async Task<IActionResult> UpdateDepartment(string name, [FromBody] DeptUpdateDTO request)
+        public async Task<ActionResult<DeptResponseDTO>> UpdateDepartment(string name, [FromBody] DeptUpdateDTO request)
         {
             if (GetCurrentUserRole() != Role.ADMIN)
-                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+                throw new ApiException(403, ErrorCode.MISSING_ROLE,
+                    new Dictionary<string, object> { { "roles", "ADMIN" } });
 
             var result = await _departmentService.UpdateDepartmentAsync(name, request);
-            if (!result.Success)
-            {
-                if (result.Message.Contains("not found"))
-                    throw new ApiException(404, ErrorCode.DEPARTMENT_NOT_FOUND,
-                        new Dictionary<string, object> { { "name", name } });
-                return BadRequest(result.Message);
-            }
-            return Ok(result.Message);
+            return Ok(result);
         }
 
         // DELETE /api/v1/departments/:name — Admin only
         [HttpDelete("{name}")]
-        public async Task<IActionResult> DeleteDepartment(string name)
+        public async Task<ActionResult<DeptResponseDTO>> DeleteDepartment(string name)
         {
             if (GetCurrentUserRole() != Role.ADMIN)
-                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+                throw new ApiException(403, ErrorCode.MISSING_ROLE,
+                    new Dictionary<string, object> { { "roles", "ADMIN" } });
 
             var result = await _departmentService.DeleteDepartmentAsync(name);
-            if (!result.Success)
-                throw new ApiException(404, ErrorCode.DEPARTMENT_NOT_FOUND,
-                    new Dictionary<string, object> { { "name", name } });
-            return Ok(result.Message);
+            return Ok(result);
         }
     }
 }

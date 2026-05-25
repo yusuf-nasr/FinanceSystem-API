@@ -4,11 +4,10 @@ namespace FinanceSystem_Dotnet.Services
 {
     public interface IDepartmentService
     {
-        Task<(bool Success, string Message)> CreateDepartmentAsync(DeptCreateDTO request);
-        Task<List<DeptResponseDTO>> GetAllDepartmentsAsync();
-        Task<PaginatedResult<DeptResponseDTO>> GetAllDepartmentsPaginatedAsync(int page, int perPage);
+        Task<DeptResponseDTO> CreateDepartmentAsync(DeptCreateDTO request);
+        Task<PaginatedResult<DeptResponseDTO>> GetAllDepartmentsPaginatedAsync(DeptQueryDTO query);
         Task<DeptResponseDTO?> GetDepartmentByNameAsync(string name);
-        Task<(bool Success, string Message)> UpdateDepartmentAsync(string name, DeptUpdateDTO request);
-        Task<(bool Success, string Message)> DeleteDepartmentAsync(string name);
+        Task<DeptResponseDTO> UpdateDepartmentAsync(string name, DeptUpdateDTO request);
+        Task<DeptResponseDTO> DeleteDepartmentAsync(string name);
     }
 }

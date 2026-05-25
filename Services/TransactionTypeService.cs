@@ -20,7 +20,7 @@ namespace FinanceSystem_Dotnet.Services
         {
             if (_context.TransactionTypes.Any(t => t.Name == request.Name))
                 throw new ApiException(409, ErrorCode.TRANSACTION_TYPE_ALREADY_EXISTS,
-                    new Dictionary<string, object> { { "name", request.Name } });
+                    new Dictionary<string, object> { { "typeName", request.Name } });
 
             var transactionType = new TransactionType
             {
@@ -67,10 +67,11 @@ namespace FinanceSystem_Dotnet.Services
             var transactionType = await _context.TransactionTypes.FirstOrDefaultAsync(t => t.Name == name);
             if (transactionType == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_TYPE_NOT_FOUND,
-                    new Dictionary<string, object> { { "name", name } });
+                    new Dictionary<string, object> { { "typeName", name } });
 
             if (!isAdmin && transactionType.CreatorId != userId)
-                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_TYPE_CREATOR);
+                throw new ApiException(403, ErrorCode.NOT_TRANSACTION_TYPE_CREATOR,
+                    new Dictionary<string, object> { { "typeName", name } });
 
             try
             {
@@ -80,7 +81,7 @@ namespace FinanceSystem_Dotnet.Services
             catch (DbUpdateException)
             {
                 throw new ApiException(409, ErrorCode.TRANSACTION_TYPE_IN_USE,
-                    new Dictionary<string, object> { { "name", name } });
+                    new Dictionary<string, object> { { "typeName", name } });
             }
 
             return new TransactionTypeResponseDTO { Name = transactionType.Name, CreatorId = transactionType.CreatorId };

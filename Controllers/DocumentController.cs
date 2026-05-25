@@ -8,7 +8,7 @@ using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/documents")]
+    [Route("api/v0/documents")]
     [ApiController]
     [Authorize]
     public class DocumentController : ControllerBase
@@ -64,12 +64,12 @@ namespace FinanceSystem_Dotnet.Controllers
             var document = await _documentService.GetDocumentByIdAsync(id);
             if (document == null)
                 throw new ApiException(404, ErrorCode.DOCUMENT_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "documentId", id.ToString() } });
 
             // Non-admins can only view documents they are part of
             if (role != Role.ADMIN && !await _documentService.IsVisibleToUser(id, userId))
                 throw new ApiException(403, ErrorCode.NOT_DOCUMENT_VIEWER,
-                    new Dictionary<string, object> { { "documentId", id } });
+                    new Dictionary<string, object> { { "documentId", id.ToString() } });
 
             return Ok(document);
         }
@@ -85,19 +85,22 @@ namespace FinanceSystem_Dotnet.Controllers
             var meta = await _documentService.GetDocumentByIdAsync(id);
             if (meta == null)
                 throw new ApiException(404, ErrorCode.DOCUMENT_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "documentId", id.ToString() } });
 
             // Non-admins can only download documents they are part of
             if (role != Role.ADMIN && !await _documentService.IsVisibleToUser(id, userId))
                 throw new ApiException(403, ErrorCode.NOT_DOCUMENT_VIEWER,
-                    new Dictionary<string, object> { { "documentId", id } });
+                    new Dictionary<string, object> { { "documentId", id.ToString() } });
 
             var result = await _documentService.DownloadDocumentAsync(id);
             if (result == null)
                 throw new ApiException(404, ErrorCode.DOCUMENT_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "documentId", id.ToString() } });
 
-            return File(result.Value.Content, "application/pdf", result.Value.Title);
+            Response.Headers["Content-Disposition"] = $"attachment; filename=\"{result.Value.Title}\"";
+            Response.ContentType = "application/pdf";
+            await Response.Body.WriteAsync(result.Value.Content);
+            return new EmptyResult();
         }
 
         // DELETE /api/v1/documents/:id

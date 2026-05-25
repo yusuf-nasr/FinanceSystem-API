@@ -1,3 +1,4 @@
+using FinanceSystem_Dotnet.Enums;
 using FinanceSystem_Dotnet.Models;
 using Microsoft.EntityFrameworkCore;
 
@@ -18,6 +19,7 @@ namespace FinanceSystem_Dotnet.DAL
         public DbSet<TransactionDocument> TransactionDocuments { get; set; }// for explicit join entity
         public DbSet<BudgetCategory> BudgetCategories { get; set; }
         public DbSet<BudgetEntry> BudgetEntries { get; set; }
+        public DbSet<Notification> Notifications { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -28,6 +30,7 @@ namespace FinanceSystem_Dotnet.DAL
                 entity.HasKey(e => e.Id);
                 entity.Property(e => e.HashedPassword).IsRequired();
                 entity.Property(e => e.Role).IsRequired();
+                entity.Property(e => e.Presence).HasDefaultValue(Enums.UserPresence.OFFLINE);
 
                 entity.HasOne(e => e.Department)
                     .WithMany(d => d.Users)
@@ -141,6 +144,7 @@ namespace FinanceSystem_Dotnet.DAL
             modelBuilder.Entity<BudgetCategory>(entity =>
             {
                 entity.HasKey(e => e.Name);
+                entity.Property(e => e.Preallocation).HasDefaultValue(0);
             });
 
             modelBuilder.Entity<BudgetEntry>(entity =>
@@ -157,6 +161,59 @@ namespace FinanceSystem_Dotnet.DAL
                     .HasForeignKey(e => e.InputterId)
                     .OnDelete(DeleteBehavior.Restrict);
             });
+
+            modelBuilder.Entity<Notification>(entity =>
+            {
+                entity.HasKey(e => e.Id);
+                entity.Property(e => e.Code).IsRequired();
+                entity.Property(e => e.Type).IsRequired();
+                entity.Property(e => e.Args).HasColumnType("jsonb");
+
+                entity.HasOne(e => e.User)
+                    .WithMany(u => u.Notifications)
+                    .HasForeignKey(e => e.UserId)
+                    .OnDelete(DeleteBehavior.Cascade);
+            });
+
+            modelBuilder.HasPostgresEnum<UserPresence>("UserPresence");
+            modelBuilder.HasPostgresEnum<Role>("UserRole");
+            modelBuilder.HasPostgresEnum<TransactionPriority>("TransactionPriority");
+            modelBuilder.HasPostgresEnum<TransactionForwardStatus>("TransactionForwardStatus");
+            modelBuilder.HasPostgresEnum<NotificationType>("NotificationType");
+
+            // Map singular table names, camelCase columns, and enum column types to match Prisma schema
+            foreach (var entity in modelBuilder.Model.GetEntityTypes())
+            {
+                entity.SetTableName(entity.ClrType.Name);
+
+                foreach (var property in entity.GetProperties())
+                {
+                    var columnName = property.Name;
+                    if (!string.IsNullOrEmpty(columnName) && char.IsUpper(columnName[0]))
+                    {
+                        columnName = char.ToLower(columnName[0]) + columnName.Substring(1);
+                    }
+                    property.SetColumnName(columnName);
+
+                    var propType = property.ClrType;
+                    var underlyingType = Nullable.GetUnderlyingType(propType) ?? propType;
+                    if (underlyingType.IsEnum)
+                    {
+                        var enumName = underlyingType.Name;
+                        if (enumName == "Role") enumName = "UserRole";
+
+                        modelBuilder.Entity(entity.ClrType)
+                            .Property(property.Name)
+                            .HasColumnType(enumName);
+                    }
+                }
+            }
+
+            // Custom column mapping for Transaction type name FK
+            modelBuilder.Entity<Transaction>()
+                .Property(t => t.TransactionTypeName)
+                .HasColumnName("typeName");
         }
     }
 }
+

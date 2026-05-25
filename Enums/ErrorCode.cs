@@ -50,5 +50,10 @@ namespace FinanceSystem_Dotnet.Enums
         DEPARTMENT_HAS_MEMBERS,
         USER_ENGAGED_IN_SYSTEM,
         BUDGET_CATEGORY_IN_USE,
+        // New: matching Node.js error codes
+        INSUFFICIENT_BUDGET,
+        NOT_LATEST_ACCOUNTANT,
+        TRANSACTION_NOT_APPROVED,
+        NOTIFICATION_NOT_FOUND,
     }
 }

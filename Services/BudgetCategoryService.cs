@@ -9,11 +9,11 @@ namespace FinanceSystem_Dotnet.Services
 {
     public interface IBudgetCategoryService
     {
-        Task<BudgetCategoryDTO> CreateAsync(string name);
-        Task<PaginatedResult<BudgetCategoryDTO>> FindAllAsync(BudgetCategoryQueryDTO query);
-        Task<BudgetCategoryDTO> FindOneAsync(string name);
-        Task<BudgetCategoryDTO> UpdateAsync(string name, UpdateBudgetCategoryDTO dto);
-        Task<BudgetCategoryDTO> DeleteAsync(string name);
+        Task<object> CreateAsync(string name);
+        Task<PaginatedResult<object>> FindAllAsync(BudgetCategoryQueryDTO query, Role role);
+        Task<object> FindOneAsync(string name, Role role);
+        Task<object> UpdateAsync(string name, UpdateBudgetCategoryDTO dto);
+        Task<object> DeleteAsync(string name, Role role);
         Task<PaginatedResult<BudgetEntryDTO>> FindAllEntriesAsync(string budgetName, BudgetEntryQueryDTO query);
         Task<BudgetEntryDTO> AddEntryAsync(string budgetName, CreateBudgetEntryDTO dto, int userId);
         Task<BudgetEntryDTO> RemoveEntryAsync(string budgetName, int id);
@@ -28,21 +28,21 @@ namespace FinanceSystem_Dotnet.Services
             _context = context;
         }
 
-        public async Task<BudgetCategoryDTO> CreateAsync(string name)
+        public async Task<object> CreateAsync(string name)
         {
             var existing = await _context.BudgetCategories.FindAsync(name);
             if (existing != null)
                 throw new ApiException(409, ErrorCode.BUDGET_CATEGORY_ALREADY_EXISTS,
-                    new Dictionary<string, object> { { "name", name } });
+                    new Dictionary<string, object> { { "categoryName", name } });
 
-            var category = new BudgetCategory { Name = name };
+            var category = new BudgetCategory { Name = name, Preallocation = 0 };
             _context.BudgetCategories.Add(category);
             await _context.SaveChangesAsync();
 
-            return new BudgetCategoryDTO { Name = name, Budget = 0, Allocated = 0, Available = 0 };
+            return new BudgetCategoryAdminDTO { Name = name, Preallocation = 0, Budget = 0, Allocated = 0, Available = 0 };
         }
 
-        public async Task<PaginatedResult<BudgetCategoryDTO>> FindAllAsync(BudgetCategoryQueryDTO query)
+        public async Task<PaginatedResult<object>> FindAllAsync(BudgetCategoryQueryDTO query, Role role)
         {
             var q = _context.BudgetCategories
                 .Include(bc => bc.Entries)
@@ -59,9 +59,12 @@ namespace FinanceSystem_Dotnet.Services
                 .Take(query.PerPage)
                 .ToListAsync();
 
-            return new PaginatedResult<BudgetCategoryDTO>
+            // Role-based visibility: non-admins only see name and preallocation (Wait! No, they see budget, allocated, available but not preallocation!)
+            var data = categories.Select(c => MapToDTO(c, role)).ToList();
+
+            return new PaginatedResult<object>
             {
-                Data = categories.Select(MapToDTO).ToList(),
+                Data = data,
                 Pagination = new PaginationMeta
                 {
                     Total = total,
@@ -74,7 +77,7 @@ namespace FinanceSystem_Dotnet.Services
             };
         }
 
-        public async Task<BudgetCategoryDTO> FindOneAsync(string name)
+        public async Task<object> FindOneAsync(string name, Role role)
         {
             var category = await _context.BudgetCategories
                 .Include(bc => bc.Entries)
@@ -83,12 +86,12 @@ namespace FinanceSystem_Dotnet.Services
 
             if (category == null)
                 throw new ApiException(404, ErrorCode.BUDGET_CATEGORY_NOT_FOUND,
-                    new Dictionary<string, object> { { "name", name } });
+                    new Dictionary<string, object> { { "categoryName", name } });
 
-            return MapToDTO(category);
+            return MapToDTO(category, role);
         }
 
-        public async Task<BudgetCategoryDTO> UpdateAsync(string name, UpdateBudgetCategoryDTO dto)
+        public async Task<object> UpdateAsync(string name, UpdateBudgetCategoryDTO dto)
         {
             var category = await _context.BudgetCategories
                 .Include(bc => bc.Entries)
@@ -97,60 +100,81 @@ namespace FinanceSystem_Dotnet.Services
 
             if (category == null)
                 throw new ApiException(404, ErrorCode.BUDGET_CATEGORY_NOT_FOUND,
-                    new Dictionary<string, object> { { "name", name } });
+                    new Dictionary<string, object> { { "categoryName", name } });
 
-            // Check new name doesn't conflict
-            if (await _context.BudgetCategories.AnyAsync(bc => bc.Name == dto.NewName))
-                throw new ApiException(409, ErrorCode.BUDGET_CATEGORY_ALREADY_EXISTS,
-                    new Dictionary<string, object> { { "name", dto.NewName } });
+            // Update preallocation if provided
+            if (dto.Preallocation.HasValue)
+                category.Preallocation = dto.Preallocation.Value;
 
-            // Rename: create new → migrate references → delete old (PK rename workaround)
-            var newCategory = new BudgetCategory { Name = dto.NewName };
-            _context.BudgetCategories.Add(newCategory);
+            // Rename if new name is provided and different
+            if (!string.IsNullOrEmpty(dto.NewName) && dto.NewName != name)
+            {
+                if (await _context.BudgetCategories.AnyAsync(bc => bc.Name == dto.NewName))
+                    throw new ApiException(409, ErrorCode.BUDGET_CATEGORY_ALREADY_EXISTS,
+                        new Dictionary<string, object> { { "categoryName", dto.NewName } });
+
+                // Rename: create new → migrate references → delete old (PK rename workaround)
+                var newCategory = new BudgetCategory { Name = dto.NewName, Preallocation = category.Preallocation };
+                _context.BudgetCategories.Add(newCategory);
+                await _context.SaveChangesAsync();
+
+                var entries = await _context.BudgetEntries.Where(e => e.BudgetName == name).ToListAsync();
+                foreach (var entry in entries) entry.BudgetName = dto.NewName;
+
+                var transactions = await _context.Transactions.Where(t => t.BudgetName == name).ToListAsync();
+                foreach (var tx in transactions) tx.BudgetName = dto.NewName;
+
+                await _context.SaveChangesAsync();
+
+                _context.BudgetCategories.Remove(category);
+                await _context.SaveChangesAsync();
+
+                var updated = await _context.BudgetCategories
+                    .Include(bc => bc.Entries)
+                    .Include(bc => bc.Transactions)
+                    .FirstAsync(bc => bc.Name == dto.NewName);
+
+                return MapToDTO(updated, Role.ADMIN);
+            }
+
             await _context.SaveChangesAsync();
 
-            var entries = await _context.BudgetEntries.Where(e => e.BudgetName == name).ToListAsync();
-            foreach (var entry in entries) entry.BudgetName = dto.NewName;
+            // Re-fetch to get updated data
+            category = await _context.BudgetCategories
+                .Include(bc => bc.Entries)
+                .Include(bc => bc.Transactions)
+                .FirstAsync(bc => bc.Name == name);
 
-            var transactions = await _context.Transactions.Where(t => t.BudgetName == name).ToListAsync();
-            foreach (var tx in transactions) tx.BudgetName = dto.NewName;
+            return MapToDTO(category, Role.ADMIN);
+        }
 
-            await _context.SaveChangesAsync();
+        public async Task<object> DeleteAsync(string name, Role role)
+        {
+            var category = await _context.BudgetCategories
+                .FirstOrDefaultAsync(bc => bc.Name == name);
+
+            if (category == null)
+                throw new ApiException(404, ErrorCode.BUDGET_CATEGORY_NOT_FOUND,
+                    new Dictionary<string, object> { { "categoryName", name } });
+
+            // Check if in use before deleting to throw BUDGET_CATEGORY_IN_USE
+            var inUse = await _context.Transactions.AnyAsync(t => t.BudgetName == name) ||
+                        await _context.BudgetEntries.AnyAsync(e => e.BudgetName == name);
+            if (inUse)
+            {
+                throw new ApiException(409, ErrorCode.BUDGET_CATEGORY_IN_USE,
+                    new Dictionary<string, object> { { "categoryName", name } });
+            }
+
+            var detailedCategory = await _context.BudgetCategories
+                .Include(bc => bc.Entries)
+                .Include(bc => bc.Transactions)
+                .FirstOrDefaultAsync(bc => bc.Name == name);
+
+            var dto = MapToDTO(detailedCategory!, role);
 
             _context.BudgetCategories.Remove(category);
             await _context.SaveChangesAsync();
-
-            var updated = await _context.BudgetCategories
-                .Include(bc => bc.Entries)
-                .Include(bc => bc.Transactions)
-                .FirstAsync(bc => bc.Name == dto.NewName);
-
-            return MapToDTO(updated);
-        }
-
-        public async Task<BudgetCategoryDTO> DeleteAsync(string name)
-        {
-            var category = await _context.BudgetCategories
-                .Include(bc => bc.Entries)
-                .Include(bc => bc.Transactions)
-                .FirstOrDefaultAsync(bc => bc.Name == name);
-
-            if (category == null)
-                throw new ApiException(404, ErrorCode.BUDGET_CATEGORY_NOT_FOUND,
-                    new Dictionary<string, object> { { "name", name } });
-
-            var dto = MapToDTO(category);
-
-            try
-            {
-                _context.BudgetCategories.Remove(category);
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateException)
-            {
-                throw new ApiException(409, ErrorCode.BUDGET_CATEGORY_IN_USE,
-                    new Dictionary<string, object> { { "name", name } });
-            }
 
             return dto;
         }
@@ -160,7 +184,7 @@ namespace FinanceSystem_Dotnet.Services
             var categoryExists = await _context.BudgetCategories.AnyAsync(bc => bc.Name == budgetName);
             if (!categoryExists)
                 throw new ApiException(404, ErrorCode.BUDGET_CATEGORY_NOT_FOUND,
-                    new Dictionary<string, object> { { "name", budgetName } });
+                    new Dictionary<string, object> { { "categoryName", budgetName } });
 
             var q = _context.BudgetEntries
                 .Include(be => be.Inputter)
@@ -210,7 +234,7 @@ namespace FinanceSystem_Dotnet.Services
             var categoryExists = await _context.BudgetCategories.AnyAsync(bc => bc.Name == budgetName);
             if (!categoryExists)
                 throw new ApiException(404, ErrorCode.BUDGET_CATEGORY_NOT_FOUND,
-                    new Dictionary<string, object> { { "budgetName", budgetName } });
+                    new Dictionary<string, object> { { "categoryName", budgetName } });
 
             var entry = new BudgetEntry
             {
@@ -237,12 +261,12 @@ namespace FinanceSystem_Dotnet.Services
 
             if (lastEntry == null || lastEntry.Id != id)
                 throw new ApiException(403, ErrorCode.NOT_LATEST_BUDGET_ENTRY,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "entryId", id.ToString() } });
 
             var entry = await _context.BudgetEntries.FindAsync(id);
             if (entry == null)
                 throw new ApiException(404, ErrorCode.BUDGET_ENTRY_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "entryId", id.ToString() } });
 
             var dto = MapEntryToDTO(entry);
             _context.BudgetEntries.Remove(entry);
@@ -251,20 +275,34 @@ namespace FinanceSystem_Dotnet.Services
             return dto;
         }
 
-        private BudgetCategoryDTO MapToDTO(BudgetCategory category)
+        private object MapToDTO(BudgetCategory category, Role role)
         {
-            var budget = category.Entries?.Sum(e => e.Amount) ?? 0;
+            var budget = (category.Entries?.Sum(e => e.Amount) ?? 0) + category.Preallocation;
             var allocated = category.Transactions?
                 .Where(t => t.Fulfilled && t.BudgetAllocation.HasValue)
                 .Sum(t => t.BudgetAllocation!.Value) ?? 0;
 
-            return new BudgetCategoryDTO
+            if (role == Role.ADMIN)
             {
-                Name = category.Name,
-                Budget = budget,
-                Allocated = allocated,
-                Available = budget - allocated
-            };
+                return new BudgetCategoryAdminDTO
+                {
+                    Name = category.Name,
+                    Budget = budget,
+                    Allocated = allocated,
+                    Available = budget - allocated,
+                    Preallocation = category.Preallocation
+                };
+            }
+            else
+            {
+                return new BudgetCategoryDTO
+                {
+                    Name = category.Name,
+                    Budget = budget,
+                    Allocated = allocated,
+                    Available = budget - allocated
+                };
+            }
         }
 
         private BudgetEntryDTO MapEntryToDTO(BudgetEntry entry)

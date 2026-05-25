@@ -11,6 +11,7 @@ namespace FinanceSystem_Dotnet.Models
         public DateTime CreatedAt { get; set; }
         public bool Active { get; set; }
         public Role Role { get; set; }
+        public UserPresence Presence { get; set; } = UserPresence.OFFLINE;
         public DateTime? LastLogin { get; set; }
         public string DepartmentName { get; set; }
         public virtual Department Department { get; set; }
@@ -21,5 +22,6 @@ namespace FinanceSystem_Dotnet.Models
         public virtual ICollection<Document> UploadedDocuments { get; set; }
         public virtual ICollection<TransactionForward> SentForwards { get; set; }
         public virtual ICollection<TransactionForward> ReceivedForwards { get; set; }
+        public virtual ICollection<Notification> Notifications { get; set; }
     }
 }

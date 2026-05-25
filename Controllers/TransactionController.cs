@@ -1,7 +1,6 @@
 using FinanceSystem_Dotnet.DTOs;
 using FinanceSystem_Dotnet.Enums;
 using FinanceSystem_Dotnet.Exceptions;
-using FinanceSystem_Dotnet.Models;
 using FinanceSystem_Dotnet.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -9,7 +8,7 @@ using System.Security.Claims;
 
 namespace FinanceSystem_Dotnet.Controllers
 {
-    [Route("api/v1/transactions")]
+    [Route("api/v0/transactions")]
     [ApiController]
     [Authorize]
     public class TransactionController : ControllerBase
@@ -41,16 +40,17 @@ namespace FinanceSystem_Dotnet.Controllers
 
         // GET /api/v1/transactions
         [HttpGet]
-        public async Task<ActionResult> FindAll([FromQuery] TransactionQuery? query, [FromQuery] int page = 1, [FromQuery] int perPage = 10)
+        public async Task<ActionResult> FindAll([FromQuery] TransactionFilterDTO filter)
         {
             var userId = GetCurrentUserId();
             var role = GetCurrentUserRole();
             var isAdmin = role == Role.ADMIN;
 
-            if (query == TransactionQuery.All && !isAdmin)
-                throw new ApiException(403, ErrorCode.MISSING_ROLE);
+            if (filter.Query == TransactionQuery.All && !isAdmin)
+                throw new ApiException(403, ErrorCode.MISSING_ROLE,
+                    new Dictionary<string, object> { { "roles", "ADMIN" } });
 
-            var result = await _transactionService.FindAllAsync(query, userId, isAdmin, page, perPage);
+            var result = await _transactionService.FindAllAsync(filter, userId, isAdmin, role);
             return Ok(result);
         }
 
@@ -65,11 +65,11 @@ namespace FinanceSystem_Dotnet.Controllers
             var result = await _transactionService.FindOneAsync(id);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "transactionId", id.ToString() } });
 
             if (!isAdmin && !await _transactionService.IsParticipant(id, userId))
                 throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT,
-                    new Dictionary<string, object> { { "transactionId", id } });
+                    new Dictionary<string, object> { { "transactionId", id.ToString() } });
 
             await _transactionService.MarkAsSeenAsync(id, userId);
 
@@ -90,29 +90,41 @@ namespace FinanceSystem_Dotnet.Controllers
             bool updatingNonAccountantFields = dto.Title != null || dto.Description != null ||
                                                dto.TransactionTypeName != null || dto.Priority.HasValue;
 
-            // Only accountant or admin can set fulfilled/budget fields
-            if ((updatingFulfilled || updatingBudgetFields) && !isAdmin && !isAccountant)
-                throw new ApiException(403, ErrorCode.RESTRICTED_FIELD_UPDATE,
-                    new Dictionary<string, object> { { "fields", "fulfilled, budgetName, budgetAllocation" } });
+            if (!isAdmin)
+            {
+                var updatingAccountantFieldsList = new List<string>();
+                if (dto.Fulfilled.HasValue) updatingAccountantFieldsList.Add("fulfilled");
+                if (dto.BudgetName != null) updatingAccountantFieldsList.Add("budgetName");
+                if (dto.BudgetAllocation.HasValue) updatingAccountantFieldsList.Add("budgetAllocation");
+
+                if (isAccountant)
+                {
+                    if (updatingNonAccountantFields)
+                        throw new ApiException(403, ErrorCode.NOT_TRANSACTION_CREATOR,
+                            new Dictionary<string, object> { { "transactionId", id.ToString() } });
+                }
+                else if (await _transactionService.IsCreator(id, userId))
+                {
+                    if (updatingAccountantFieldsList.Any())
+                        throw new ApiException(403, ErrorCode.RESTRICTED_FIELD_UPDATE,
+                            new Dictionary<string, object> { { "fields", string.Join(", ", updatingAccountantFieldsList) } });
+                }
+                else
+                {
+                    throw new ApiException(403, ErrorCode.NOT_TRANSACTION_CREATOR,
+                        new Dictionary<string, object> { { "transactionId", id.ToString() } });
+                }
+            }
 
             // Validate: if setting fulfilled=true, budgetName + budgetAllocation are required
-            if (dto.Fulfilled == true && (!updatingBudgetFields || string.IsNullOrEmpty(dto.BudgetName) || !dto.BudgetAllocation.HasValue))
+            if (dto.Fulfilled == true && (string.IsNullOrEmpty(dto.BudgetName) || !dto.BudgetAllocation.HasValue))
                 throw new ApiException(400, ErrorCode.MISSING_BUDGET_INFO,
                     new Dictionary<string, object> { { "required", "budgetName, budgetAllocation" } });
-
-            // Non-admin, non-accountant updates: must be the creator
-            bool isUpdatingOnlyAccountantFields = (updatingFulfilled || updatingBudgetFields) && !updatingNonAccountantFields;
-            if (!isAdmin && !(isAccountant && isUpdatingOnlyAccountantFields))
-            {
-                if (!await _transactionService.IsCreator(id, userId))
-                    throw new ApiException(403, ErrorCode.NOT_TRANSACTION_CREATOR,
-                        new Dictionary<string, object> { { "transactionId", id } });
-            }
 
             var result = await _transactionService.UpdateAsync(id, dto, userId, role);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "transactionId", id.ToString() } });
 
             return Ok(result);
         }
@@ -127,12 +139,12 @@ namespace FinanceSystem_Dotnet.Controllers
 
             if (!isAdmin && !await _transactionService.IsCreator(id, userId))
                 throw new ApiException(403, ErrorCode.NOT_TRANSACTION_CREATOR,
-                    new Dictionary<string, object> { { "transactionId", id } });
+                    new Dictionary<string, object> { { "transactionId", id.ToString() } });
 
             var result = await _transactionService.DeleteAsync(id, role);
             if (result == null)
                 throw new ApiException(404, ErrorCode.TRANSACTION_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "transactionId", id.ToString() } });
 
             return Ok(result);
         }
@@ -164,7 +176,7 @@ namespace FinanceSystem_Dotnet.Controllers
 
                 if (!await _transactionService.IsAttacher(id, documentId, userId))
                     throw new ApiException(403, ErrorCode.NOT_DOCUMENT_ATTACHER,
-                        new Dictionary<string, object> { { "transactionId", id }, { "documentId", documentId } });
+                        new Dictionary<string, object> { { "transactionId", id.ToString() }, { "documentId", documentId.ToString() } });
             }
 
             var result = await _transactionService.DetachDocumentAsync(id, documentId, userId, role);
@@ -187,18 +199,18 @@ namespace FinanceSystem_Dotnet.Controllers
             {
                 if (latestForward.ReceiverSeen)
                     throw new ApiException(403, ErrorCode.FORWARD_ALREADY_SEEN,
-                        new Dictionary<string, object> { { "transactionId", transactionId } });
+                        new Dictionary<string, object> { { "forwardId", latestForward.Id.ToString() } });
             }
             else if (latestForward.ReceiverId == userId)
             {
                 if (latestForward.Status != TransactionForwardStatus.WAITING)
                     throw new ApiException(403, ErrorCode.FORWARD_ALREADY_RESPONDED,
-                        new Dictionary<string, object> { { "transactionId", transactionId } });
+                        new Dictionary<string, object> { { "forwardId", latestForward.Id.ToString() } });
             }
             else
             {
                 throw new ApiException(403, ErrorCode.NOT_TRANSACTION_PARTICIPANT,
-                    new Dictionary<string, object> { { "transactionId", transactionId } });
+                    new Dictionary<string, object> { { "transactionId", transactionId.ToString() } });
             }
         }
     }

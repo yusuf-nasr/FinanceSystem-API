@@ -55,7 +55,7 @@ namespace FinanceSystem_Dotnet.Services
                 {
                     Id = d.Id,
                     Title = d.Title,
-                    URI = $"/api/v1/documents/{d.Id}/download",
+                    DownloadURI = $"/documents/{d.Id}/download",
                     UploadedAt = d.UploadedAt,
                     UploaderId = d.UploaderId
                 });
@@ -82,12 +82,12 @@ namespace FinanceSystem_Dotnet.Services
             var document = await _context.Documents.FindAsync(id);
             if (document == null)
                 throw new ApiException(404, ErrorCode.DOCUMENT_NOT_FOUND,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "documentId", id.ToString() } });
 
             // Only the uploader or admin can delete
             if (role != Role.ADMIN && document.UploaderId != userId)
                 throw new ApiException(403, ErrorCode.NOT_DOCUMENT_UPLOADER,
-                    new Dictionary<string, object> { { "documentId", id } });
+                    new Dictionary<string, object> { { "documentId", id.ToString() } });
 
             try
             {
@@ -97,7 +97,7 @@ namespace FinanceSystem_Dotnet.Services
             catch (DbUpdateException)
             {
                 throw new ApiException(409, ErrorCode.DOCUMENT_ALREADY_USED,
-                    new Dictionary<string, object> { { "id", id } });
+                    new Dictionary<string, object> { { "documentId", id.ToString() } });
             }
 
             return MapToResponse(document);
@@ -135,7 +135,7 @@ namespace FinanceSystem_Dotnet.Services
             {
                 Id = document.Id,
                 Title = document.Title,
-                URI = $"/api/v1/documents/{document.Id}/download",
+                DownloadURI = $"/documents/{document.Id}/download",
                 UploadedAt = document.UploadedAt,
                 UploaderId = document.UploaderId
             };

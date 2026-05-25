@@ -1,4 +1,5 @@
 using FinanceSystem_Dotnet.DTOs;
+using FinanceSystem_Dotnet.Enums;
 
 namespace FinanceSystem_Dotnet.Services
 {
@@ -9,5 +10,7 @@ namespace FinanceSystem_Dotnet.Services
         Task<UserResponseDTO?> GetUserByIdAsync(int id);
         Task<UserResponseDTO> UpdateUserAsync(int id, UserUpdateDTO request);
         Task<UserResponseDTO> DeleteUserAsync(int id);
+        Task UpdatePresenceAsync(int userId, UserPresence presence);
+        Task ResetAllPresenceAsync();
     }
 }

@@ -12,6 +12,11 @@ namespace FinanceSystem_Dotnet.DTOs
         public double Available { get; set; }
     }
 
+    public class BudgetCategoryAdminDTO : BudgetCategoryDTO
+    {
+        public double Preallocation { get; set; }
+    }
+
     public class BudgetEntryDTO
     {
         public int Id { get; set; }
@@ -28,7 +33,8 @@ namespace FinanceSystem_Dotnet.DTOs
 
     public class UpdateBudgetCategoryDTO
     {
-        public string NewName { get; set; }
+        public string? NewName { get; set; }
+        public double? Preallocation { get; set; }
     }
 
     public class BudgetCategoryQueryDTO
